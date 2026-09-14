@@ -236,7 +236,7 @@ export default function SignInScreen({
         {/* Sign In Button */}
         <TouchableOpacity style={styles.signInBtn} onPress={handleSignIn} activeOpacity={0.85}>
           <Text style={styles.signInBtnText}>
-            {selectedRole === 'merchant' ? 'เข้าสู่ระบบร้านค้า →' : 'เข้าสู่ระบบ →'}
+            {selectedRole === 'merchant' ? 'เข้าสู่ระบบร้านค้า →' : 'เข้าสู่ระบบลูกค้า →'}
           </Text>
         </TouchableOpacity>
 
