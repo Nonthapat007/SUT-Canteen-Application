@@ -36,7 +36,7 @@ export default function CanteenStatusCard({ selectedCanteen }) {
 
       {/* Right Crowd Icon */}
       <View style={styles.iconBox}>
-        <Text style={styles.crowdEmoji}>👥</Text>
+        <Icon name="user" size={24} color={COLORS.primary} />
       </View>
     </View>
   );

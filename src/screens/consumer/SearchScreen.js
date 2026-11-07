@@ -399,7 +399,26 @@ export default function SearchScreen({
 
                     {/* Price & Action */}
                     <View style={styles.actionCol}>
-                      <Text style={styles.dishPrice}>฿{item.price}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.dishPrice}>฿{item.price}</Text>
+                        {storeActions?.toggleFavoriteDish && (
+                          <TouchableOpacity
+                            style={styles.favDishBtn}
+                            onPress={(e) => {
+                              e.stopPropagation?.();
+                              storeActions.toggleFavoriteDish(item, item.stall);
+                            }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Icon
+                              name="heart"
+                              size={15}
+                              color={storeActions?.isFavoriteDish?.(item.id, item.thaiName || item.name) ? '#EF4444' : '#CBD5E1'}
+                              variant={storeActions?.isFavoriteDish?.(item.id, item.thaiName || item.name) ? 'filled' : 'outline'}
+                            />
+                          </TouchableOpacity>
+                        )}
+                      </View>
                       {isClosed ? (
                         <View style={styles.closedBtn}>
                           <Text style={styles.closedBtnText}>ปิด</Text>
@@ -428,6 +447,8 @@ export default function SearchScreen({
           onClose={() => setShowFoodModal(false)}
           stall={selectedDish.stall}
           menuItem={selectedDish}
+          isFavoriteDish={storeActions?.isFavoriteDish ? storeActions.isFavoriteDish(selectedDish.id, selectedDish.name) : false}
+          onToggleFavoriteDish={() => storeActions?.toggleFavoriteDish && storeActions.toggleFavoriteDish(selectedDish, selectedDish.stall)}
           onProceedToSync={handleProceedToSync}
         />
       )}
@@ -738,6 +759,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#EF4444',
     fontWeight: '700',
+  },
+  favDishBtn: {
+    padding: 3,
   },
   actionCol: {
     alignItems: 'flex-end',

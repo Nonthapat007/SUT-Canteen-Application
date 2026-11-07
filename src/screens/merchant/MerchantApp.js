@@ -18,9 +18,16 @@ export default function MerchantApp({
   onLogout,
 }) {
   const [activeTab, setActiveTab] = useState('queue'); // 'queue' | 'menu' | 'summary' | 'profile'
+  const [visitedTabs, setVisitedTabs] = useState(new Set(['queue']));
   const [stalls, setStalls] = useState([]);
   const [currentStall, setCurrentStall] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  useEffect(() => {
+    if (!visitedTabs.has(activeTab)) {
+      setVisitedTabs((prev) => new Set(prev).add(activeTab));
+    }
+  }, [activeTab]);
 
   const loadStalls = async () => {
     try {
@@ -147,40 +154,48 @@ export default function MerchantApp({
 
       {/* Main Tab Screen Content */}
       <View style={styles.body}>
-        {activeTab === 'queue' && (
-          <MerchantQueueScreen
-            storeState={storeState}
-            storeActions={storeActions}
-            shopName={currentShopName}
-            currentStall={currentStall}
-            currentUser={currentUser}
-            onOpenCreateStall={() => setShowCreateModal(true)}
-          />
+        {visitedTabs.has('queue') && (
+          <View style={[styles.tabContentContainer, activeTab !== 'queue' && styles.tabContentHidden]}>
+            <MerchantQueueScreen
+              storeState={storeState}
+              storeActions={storeActions}
+              shopName={currentShopName}
+              currentStall={currentStall}
+              currentUser={currentUser}
+              onOpenCreateStall={() => setShowCreateModal(true)}
+            />
+          </View>
         )}
 
-        {activeTab === 'menu' && (
-          <MerchantMenuScreen
-            shopName={currentShopName}
-            currentStall={currentStall}
-            onOpenCreateStall={() => setShowCreateModal(true)}
-          />
+        {visitedTabs.has('menu') && (
+          <View style={[styles.tabContentContainer, activeTab !== 'menu' && styles.tabContentHidden]}>
+            <MerchantMenuScreen
+              shopName={currentShopName}
+              currentStall={currentStall}
+              onOpenCreateStall={() => setShowCreateModal(true)}
+            />
+          </View>
         )}
 
-        {activeTab === 'summary' && (
-          <MerchantSummaryScreen
-            currentStall={currentStall}
-          />
+        {visitedTabs.has('summary') && (
+          <View style={[styles.tabContentContainer, activeTab !== 'summary' && styles.tabContentHidden]}>
+            <MerchantSummaryScreen
+              currentStall={currentStall}
+            />
+          </View>
         )}
 
-        {activeTab === 'profile' && (
-          <MerchantProfileScreen
-            shopName={currentShopName}
-            currentStall={currentStall}
-            currentUser={currentUser}
-            onOpenCreateStall={() => setShowCreateModal(true)}
-            onUpdateStallImage={handleUpdateStallImage}
-            onLogout={onLogout}
-          />
+        {visitedTabs.has('profile') && (
+          <View style={[styles.tabContentContainer, activeTab !== 'profile' && styles.tabContentHidden]}>
+            <MerchantProfileScreen
+              shopName={currentShopName}
+              currentStall={currentStall}
+              currentUser={currentUser}
+              onOpenCreateStall={() => setShowCreateModal(true)}
+              onUpdateStallImage={handleUpdateStallImage}
+              onLogout={onLogout}
+            />
+          </View>
         )}
       </View>
 
@@ -272,5 +287,11 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
+  },
+  tabContentContainer: {
+    flex: 1,
+  },
+  tabContentHidden: {
+    display: 'none',
   },
 });

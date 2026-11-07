@@ -334,6 +334,27 @@ export default function Icon({
           </G>
         );
 
+      // --- TRASH / DELETE ---
+      case 'trash':
+      case 'trash-2':
+      case 'delete':
+        return (
+          <G stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" fill="none">
+            <Polyline points="3 6 5 6 21 6" />
+            <Path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <Line x1="10" y1="11" x2="10" y2="17" />
+            <Line x1="14" y1="11" x2="14" y2="17" />
+          </G>
+        );
+
+      // --- SHIELD / SECURITY ---
+      case 'shield':
+        return (
+          <G stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" fill="none">
+            <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </G>
+        );
+
       // --- GEAR / SETTINGS ---
       case 'gear':
       case 'settings':
@@ -402,6 +423,24 @@ export default function Icon({
             <Path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" />
             <Path d="M4 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H6" />
             <Circle cx="18" cy="14" r="1" fill={color} />
+          </G>
+        );
+
+      case 'gift':
+        if (isFilled) {
+          return (
+            <G fill={color}>
+              <Path d="M20 6h-2.18c.11-.31.18-.65.18-1a3 3 0 0 0-3-3c-1.74 0-3.41 1.97-4 3-.59-1.03-2.26-3-4-3a3 3 0 0 0-3 3c0 .35.07.69.18 1H2v4h2v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V10h2V6zm-9 0c-.86-1.57-2.07-2-2.5-2-.83 0-1.5.67-1.5 1.5 0 1.25 2.5 2.5 4 2.5v-2zm2 0c1.5 0 4-1.25 4-2.5 0-.83-.67-1.5-1.5-1.5-.43 0-1.64.43-2.5 2v2zm5 14H13V12h5v8zm-7 0H6V12h5v8z" />
+            </G>
+          );
+        }
+        return (
+          <G stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" fill="none">
+            <Polyline points="20 12 20 22 4 22 4 12" />
+            <Rect x="2" y="7" width="20" height="5" />
+            <Line x1="12" y1="22" x2="12" y2="7" />
+            <Path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" />
+            <Path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" />
           </G>
         );
 

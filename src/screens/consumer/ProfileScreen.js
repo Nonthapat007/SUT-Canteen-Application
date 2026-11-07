@@ -1,6 +1,6 @@
 // Profile Screen matching Reference Mockup & UX Laws
 // Features:
-// - Top Bar: "Profile" with GPS Building Selector Pill ("📍 จุดอาคารปัจจุบัน") right next to Profile for instant visibility & 1-tap change
+// - Top Bar: "Profile" with GPS Building Selector Pill ("จุดอาคารปัจจุบัน") right next to Profile for instant visibility & 1-tap change
 // - User Hero Card: Overlapping avatar, Name, Student ID / Faculty
 // - Floating Balance Card: Wallet Balance (฿150) + SUT Rewards (1,200 pts) with 1-tap Top Up
 // - Quick Actions: "Order History & Reorder" and "Favorites"
@@ -22,10 +22,13 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../../constants/colors';
 import { SUT_BUILDINGS } from '../../constants/campusData';
 import Icon from '../../components/common/Icon';
 import ModernSwitch from '../../components/common/ModernSwitch';
+import FavoritesModal from '../../components/FavoritesModal';
+import authService from '../../services/authService';
 import { getPermanentImageUri, sanitizeAvatarUri } from '../../utils/imageUtils';
 import { FONT_FAMILY, TYPOGRAPHY } from '../../constants/typography';
 
@@ -35,6 +38,13 @@ export default function ProfileScreen({
   walletBalance = 0,
   rewardsPoints = 0,
   highlightWallet = false,
+  favoriteDishes = [],
+  favoriteStallIds = [],
+  stalls = [],
+  onQuickOrderDish,
+  onSelectStall,
+  onToggleFavoriteDish,
+  onToggleFavoriteStall,
   onResetHighlight,
   onSelectBuilding,
   onTopUpWallet,
@@ -46,7 +56,11 @@ export default function ProfileScreen({
 }) {
   // Settings States
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [language, setLanguage] = useState('Thai / Eng');
+  const [orderAlerts, setOrderAlerts] = useState(true);
+  const [promoAlerts, setPromoAlerts] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+
+  const [language, setLanguage] = useState('ไทย (TH)');
 
   // Modals
   const [showTopUpModal, setShowTopUpModal] = useState(false);
@@ -54,7 +68,10 @@ export default function ProfileScreen({
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
   const [showFavoritesModal, setShowFavoritesModal] = useState(false);
   const [showBuildingModal, setShowBuildingModal] = useState(false);
-  const [showInfoModal, setShowInfoModal] = useState(null); // 'privacy' | 'help' | null
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Edit Profile States
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
@@ -66,6 +83,85 @@ export default function ProfileScreen({
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [editError, setEditError] = useState('');
 
+  // Saved customizations custom item input
+  const [newCustomPref, setNewCustomPref] = useState('');
+
+  // Password Change States
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(true);
+  const [rememberMePref, setRememberMePref] = useState(true);
+
+  // Help Center: FAQs Accordion & Feedback Form
+  const [expandedFaqIndex, setExpandedFaqIndex] = useState(null);
+  const [feedbackText, setFeedbackText] = useState('');
+
+  const faqs = [
+    {
+      q: 'ระบบคำนวณเวลาเดิน (Predictive Slotting) ทำงานอย่างไร?',
+      a: 'ระบบจะคำนวณระยะทางเดินจริงจากอาคารเรียน (เช่น B1, B2) มายังโรงอาหาร และหน่วงเวลาออเดอร์บนคลาวด์ ปล่อยเข้าจอครัวแม่ค้าพอดีกับเวลาที่คุณเดินมาถึง ทำให้อาหารปรุงเสร็จร้อนๆ พอดี 0 นาที ไม่ต้องยืนรอคิว',
+    },
+    {
+      q: 'เมนูพร้อมหยิบทันที (Grab & Go) คืออะไร และรับได้ที่ไหน?',
+      a: 'คืออาหารและเครื่องดื่มที่แม่ค้าปรุงเสร็จแล้วและบรรจุกล่องพร้อมรับ เมื่อสั่งซื้อและตัดเงินผ่าน SUT Wallet คุณสามารถเดินไปรับที่ช่อง Fast-Lane หน้าเคาน์เตอร์ได้ทันที ไม่ต้องรอคิวปรุง',
+    },
+    {
+      q: 'วิธีเติมเงินเข้า SUT Canteen Wallet ทำอย่างไร?',
+      a: 'สามารถกดปุ่ม "+ เติมเงิน" ในหน้าโปรไฟล์ แล้วเลือกจำนวนเงิน ชำระผ่าน PromptPay QR Code หรือ Mobile Banking ได้ทุกธนาคาร โดยไม่มีค่าธรรมเนียม เงินเข้ากระเป๋าทันที',
+    },
+    {
+      q: 'แต้มสะสม SUT Points ใช้อย่างไร?',
+      a: 'ทุกการสั่งซื้อจะได้รับแต้มสะสม สามารถนำแต้มไปแลกส่วนลดค่าอาหาร ฿10, ฿20 หรือฟรีท็อปปิ้งไข่ดาวในหน้ารายการคำสั่งซื้อ',
+    },
+    {
+      q: 'สามารถยกเลิกออเดอร์หรือขอเงินคืนได้ไหม?',
+      a: 'สามารถกดยกเลิกได้ในช่วงเวลาที่ออเดอร์ยังอยู่สถานะ "หน่วงเวลาบนคลาวด์" ก่อนที่ระบบจะส่งเข้าจอครัวแม่ค้า เงินจะคืนเข้ากระเป๋า Wallet ทันที',
+    },
+  ];
+
+  // Saved customizations state
+  const [savedPreferences, setSavedPreferences] = useState([
+    { id: '1', label: 'ไม่ใส่ถั่วงอก (No bean sprouts)', enabled: true },
+    { id: '2', label: 'เผ็ดน้อย (Mild spicy)', enabled: true },
+    { id: '3', label: 'ไม่ใส่ผงชูรส (No MSG)', enabled: false },
+    { id: '4', label: 'ไข่ดาวไม่สุก (Soft yolk)', enabled: true },
+    { id: '5', label: 'หวานน้อย (Less sweet)', enabled: true },
+    { id: '6', label: 'แยกน้ำซุป (Soup on side)', enabled: false },
+  ]);
+
+  // Load saved settings from AsyncStorage on mount
+  useEffect(() => {
+    const loadSavedSettings = async () => {
+      try {
+        const savedPref = await AsyncStorage.getItem('@sut_saved_preferences');
+        if (savedPref) {
+          const parsed = JSON.parse(savedPref);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setSavedPreferences(parsed);
+          }
+        }
+        const savedLang = await AsyncStorage.getItem('@sut_app_language');
+        if (savedLang) {
+          setLanguage(savedLang);
+        }
+        const savedNotif = await AsyncStorage.getItem('@sut_notification_settings');
+        if (savedNotif) {
+          const parsedNotif = JSON.parse(savedNotif);
+          if (parsedNotif.master !== undefined) setNotificationsEnabled(parsedNotif.master);
+          if (parsedNotif.orderAlerts !== undefined) setOrderAlerts(parsedNotif.orderAlerts);
+          if (parsedNotif.promoAlerts !== undefined) setPromoAlerts(parsedNotif.promoAlerts);
+          if (parsedNotif.soundEnabled !== undefined) setSoundEnabled(parsedNotif.soundEnabled);
+        }
+      } catch (e) {
+        console.warn('Failed to load settings from AsyncStorage:', e);
+      }
+    };
+    loadSavedSettings();
+  }, []);
+
   // If redirected because of insufficient balance (0 Baht), auto-show modal after brief delay
   useEffect(() => {
     if (highlightWallet) {
@@ -76,25 +172,129 @@ export default function ProfileScreen({
     }
   }, [highlightWallet]);
 
-  // Saved customizations state
-  const [savedPreferences, setSavedPreferences] = useState([
-    { id: '1', label: 'ไม่ใส่ถั่วงอก (No bean sprouts)', enabled: true },
-    { id: '2', label: 'เผ็ดน้อย (Mild spicy)', enabled: true },
-    { id: '3', label: 'ไม่ใส่ผงชูรส (No MSG)', enabled: false },
-    { id: '4', label: 'ไข่ดาวไม่สุก (Soft yolk)', enabled: true },
-    { id: '5', label: 'หวานน้อย (Less sweet)', enabled: true },
-  ]);
-
-  // Favorite items mock
-  const favoriteItems = [
-    { id: 'f1', name: 'ก๋วยเตี๋ยวเรือสูตรพิเศษ', stall: 'Noodle House', price: 45, icon: '🍜' },
-    { id: 'f2', name: 'ข้าวมันไก่ผสมพิเศษ', stall: "Mama's Kitchen", price: 50, icon: '🍗' },
-    { id: 'f3', name: 'น้ำแตงโมปั่นเกล็ดหิมะ', stall: 'Fruit Bar', price: 35, icon: '🍉' },
-  ];
-
   const handleTogglePreference = (id) => {
-    setSavedPreferences((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, enabled: !item.enabled } : item))
+    setSavedPreferences((prev) => {
+      const updated = prev.map((item) =>
+        item.id === id ? { ...item, enabled: !item.enabled } : item
+      );
+      AsyncStorage.setItem('@sut_saved_preferences', JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+  };
+
+  const handleAddCustomPref = () => {
+    const trimmed = newCustomPref.trim();
+    if (!trimmed) return;
+    const newItem = {
+      id: Date.now().toString(),
+      label: trimmed,
+      enabled: true,
+      isCustom: true,
+    };
+    const updated = [...savedPreferences, newItem];
+    setSavedPreferences(updated);
+    setNewCustomPref('');
+    AsyncStorage.setItem('@sut_saved_preferences', JSON.stringify(updated)).catch(() => {});
+  };
+
+  const handleDeleteCustomPref = (id) => {
+    const updated = savedPreferences.filter((p) => p.id !== id);
+    setSavedPreferences(updated);
+    AsyncStorage.setItem('@sut_saved_preferences', JSON.stringify(updated)).catch(() => {});
+  };
+
+  const handleSavePreferences = async () => {
+    try {
+      await AsyncStorage.setItem('@sut_saved_preferences', JSON.stringify(savedPreferences));
+      setShowCustomizationModal(false);
+      Alert.alert('บันทึกสำเร็จ', 'บันทึกตัวเลือกพิเศษของคุณเรียบร้อยแล้ว');
+    } catch (e) {
+      setShowCustomizationModal(false);
+    }
+  };
+
+  // Notifications handler
+  const handleSaveNotifications = async () => {
+    try {
+      await AsyncStorage.setItem(
+        '@sut_notification_settings',
+        JSON.stringify({
+          master: notificationsEnabled,
+          orderAlerts,
+          promoAlerts,
+          soundEnabled,
+        })
+      );
+      setShowNotificationModal(false);
+      Alert.alert('บันทึกสำเร็จ', 'อัปเดตการตั้งค่าการแจ้งเตือนเรียบร้อยแล้ว');
+    } catch (e) {
+      setShowNotificationModal(false);
+    }
+  };
+
+  // Language selection handler
+  const handleSelectLanguage = async (newLang) => {
+    setLanguage(newLang);
+    setShowLanguageModal(false);
+    try {
+      await AsyncStorage.setItem('@sut_app_language', newLang);
+    } catch (e) {}
+    Alert.alert('เปลี่ยนภาษาสำเร็จ', `ระบบเปลี่ยนภาษาเป็น "${newLang}" เรียบร้อยแล้ว`);
+  };
+
+  // Password update handler
+  const handleUpdatePassword = async () => {
+    if (!oldPassword) {
+      setPasswordError('กรุณากรอกรหัสผ่านปัจจุบัน');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordError('รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    setPasswordError('');
+
+    const res = await authService.updatePassword(oldPassword, newPassword, currentUser);
+    setIsUpdatingPassword(false);
+
+    if (res?.error) {
+      setPasswordError(res.error);
+    } else {
+      setOldPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      Alert.alert('สำเร็จ', 'เปลี่ยนรหัสผ่านเรียบร้อยแล้ว!');
+      setShowPrivacyModal(false);
+    }
+  };
+
+  // Clear cache handler
+  const handleClearCache = async () => {
+    try {
+      Alert.alert(
+        'ล้างข้อมูลแคชสำเร็จ',
+        'ระบบได้ทำการล้างประวัติการค้นหาและไฟล์แคชชั่วคราวเรียบร้อยแล้ว'
+      );
+    } catch (e) {}
+  };
+
+  // Feedback handler
+  const handleSendFeedback = () => {
+    if (!feedbackText.trim()) {
+      Alert.alert('กรุณากรอกข้อความ', 'กรุณาระบุปัญหาหรือข้อเสนอแนะที่ต้องการแจ้ง');
+      return;
+    }
+    setFeedbackText('');
+    setShowHelpModal(false);
+    Alert.alert(
+      'ขอบคุณสำหรับข้อเสนอแนะ',
+      'ทีมงานฝ่ายดูแลสวัสดิการอาหาร มทส. ได้รับเรื่องเรียบร้อยแล้ว และจะนำไปพัฒนาปรับปรุงระบบต่อไป'
     );
   };
 
@@ -114,7 +314,7 @@ export default function ProfileScreen({
       onResetHighlight();
     }
     Alert.alert(
-      '🎉 เติมเงินสำเร็จ!',
+      'เติมเงินสำเร็จ',
       `เติมเงินเข้า SUT Canteen Wallet จำนวน ฿${amountVal.toLocaleString()} เรียบร้อยแล้ว\nยอดคงเหลือปัจจุบัน: ฿${(walletBalance + amountVal).toLocaleString()}`
     );
   };
@@ -227,7 +427,7 @@ export default function ProfileScreen({
 
         <TouchableOpacity
           style={styles.gearBtn}
-          onPress={() => setShowInfoModal('help')}
+          onPress={() => setShowHelpModal(true)}
           activeOpacity={0.7}
         >
           <Icon name="gear" size={18} color="#475569" strokeWidth={2} />
@@ -300,7 +500,7 @@ export default function ProfileScreen({
                   ฿{walletBalance}
                 </Text>
                 <Text style={[styles.topUpHint, highlightWallet && styles.topUpHintHighlighted]}>
-                  {highlightWallet ? '👉 แตะเพื่อเติมเงินเลย' : '+ แตะเพื่อเติมเงิน'}
+                  {highlightWallet ? 'แตะเพื่อเติมเงินทันที' : '+ แตะเพื่อเติมเงิน'}
                 </Text>
               </View>
 
@@ -359,7 +559,7 @@ export default function ProfileScreen({
           >
             <View style={styles.settingLeft}>
               <Icon name="pencil" size={19} color="#475569" strokeWidth={2} />
-              <View>
+              <View style={styles.settingTextCol}>
                 <Text style={styles.settingLabel}>Edit Profile</Text>
                 <Text style={styles.settingSub}>แก้ไขชื่อ, เบอร์โทร, อีเมล, เพศ, รูปภาพ</Text>
               </View>
@@ -370,7 +570,11 @@ export default function ProfileScreen({
           <View style={styles.rowDivider} />
 
           {/* Row 1: Notifications */}
-          <View style={styles.settingRow}>
+          <TouchableOpacity
+            style={styles.settingRow}
+            onPress={() => setShowNotificationModal(true)}
+            activeOpacity={0.7}
+          >
             <View style={styles.settingLeft}>
               <Icon
                 name="bell"
@@ -378,14 +582,32 @@ export default function ProfileScreen({
                 color="#475569"
                 strokeWidth={2}
               />
-              <Text style={styles.settingLabel}>Notifications</Text>
+              <View style={styles.settingTextCol}>
+                <Text style={styles.settingLabel}>Notifications</Text>
+                <Text style={styles.settingSub}>
+                  {notificationsEnabled ? 'เปิดรับแจ้งเตือนสถานะอาหาร & ส่วนลด' : 'ปิดการแจ้งเตือน'}
+                </Text>
+              </View>
             </View>
-            <ModernSwitch
-              value={notificationsEnabled}
-              onValueChange={setNotificationsEnabled}
-              activeTrackColor={COLORS.primary}
-            />
-          </View>
+            <View style={styles.settingRight}>
+              <ModernSwitch
+                value={notificationsEnabled}
+                onValueChange={(val) => {
+                  setNotificationsEnabled(val);
+                  AsyncStorage.setItem(
+                    '@sut_notification_settings',
+                    JSON.stringify({
+                      master: val,
+                      orderAlerts,
+                      promoAlerts,
+                      soundEnabled,
+                    })
+                  ).catch(() => {});
+                }}
+                activeTrackColor={COLORS.primary}
+              />
+            </View>
+          </TouchableOpacity>
 
           <View style={styles.rowDivider} />
 
@@ -397,9 +619,13 @@ export default function ProfileScreen({
           >
             <View style={styles.settingLeft}>
               <Icon name="sliders" size={19} color="#475569" strokeWidth={2} />
-              <View>
+              <View style={styles.settingTextCol}>
                 <Text style={styles.settingLabel}>Saved Customizations</Text>
-                <Text style={styles.settingSub}>e.g., No spicy</Text>
+                <Text style={styles.settingSub}>
+                  {savedPreferences.filter((p) => p.enabled).length > 0
+                    ? `${savedPreferences.filter((p) => p.enabled).length} รายการที่เปิดใช้งาน (เช่น ไม่ใส่ถั่วงอก, เผ็ดน้อย)`
+                    : 'กำหนดรสชาติและตัวเลือกอาหารอัตโนมัติ'}
+                </Text>
               </View>
             </View>
             <Icon name="chevron-right" size={16} color="#94A3B8" strokeWidth={2.5} />
@@ -410,15 +636,15 @@ export default function ProfileScreen({
           {/* Row 3: Language */}
           <TouchableOpacity
             style={styles.settingRow}
-            onPress={() => {
-              const next = language === 'Thai / Eng' ? 'ไทย (TH)' : 'Thai / Eng';
-              setLanguage(next);
-            }}
+            onPress={() => setShowLanguageModal(true)}
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
               <Icon name="globe" size={19} color="#475569" strokeWidth={2} />
-              <Text style={styles.settingLabel}>Language</Text>
+              <View style={styles.settingTextCol}>
+                <Text style={styles.settingLabel}>Language</Text>
+                <Text style={styles.settingSub}>ภาษาของระบบแอปพลิเคชัน</Text>
+              </View>
             </View>
             <View style={styles.settingRight}>
               <Text style={styles.languageText}>{language}</Text>
@@ -431,12 +657,15 @@ export default function ProfileScreen({
           {/* Row 4: Privacy & Security */}
           <TouchableOpacity
             style={styles.settingRow}
-            onPress={() => setShowInfoModal('privacy')}
+            onPress={() => setShowPrivacyModal(true)}
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
               <Icon name="lock" size={19} color="#475569" strokeWidth={2} />
-              <Text style={styles.settingLabel}>Privacy & Security</Text>
+              <View style={styles.settingTextCol}>
+                <Text style={styles.settingLabel}>Privacy & Security</Text>
+                <Text style={styles.settingSub}>เปลี่ยนรหัสผ่าน, ความปลอดภัย, PDPA</Text>
+              </View>
             </View>
             <Icon name="chevron-right" size={16} color="#94A3B8" strokeWidth={2.5} />
           </TouchableOpacity>
@@ -446,12 +675,15 @@ export default function ProfileScreen({
           {/* Row 5: Help Center */}
           <TouchableOpacity
             style={styles.settingRow}
-            onPress={() => setShowInfoModal('help')}
+            onPress={() => setShowHelpModal(true)}
             activeOpacity={0.7}
           >
             <View style={styles.settingLeft}>
               <Icon name="help" size={19} color="#475569" strokeWidth={2} />
-              <Text style={styles.settingLabel}>Help Center</Text>
+              <View style={styles.settingTextCol}>
+                <Text style={styles.settingLabel}>Help Center</Text>
+                <Text style={styles.settingSub}>คำถามที่พบบ่อย (FAQs), ติดต่อเจ้าหน้าที่</Text>
+              </View>
             </View>
             <Icon name="chevron-right" size={16} color="#94A3B8" strokeWidth={2.5} />
           </TouchableOpacity>
@@ -571,44 +803,84 @@ export default function ProfileScreen({
       {/* MODAL 2: Saved Customizations */}
       <Modal visible={showCustomizationModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { maxHeight: '88%' }]}>
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
                 <Icon name="sliders" size={18} color={COLORS.primary} strokeWidth={2.2} />
                 <Text style={styles.modalTitle}>ตัวเลือกพิเศษที่บันทึกไว้</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowCustomizationModal(false)}>
+              <TouchableOpacity
+                onPress={() => setShowCustomizationModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
                 <Icon name="close" size={18} color="#64748B" strokeWidth={2} />
               </TouchableOpacity>
             </View>
 
             <Text style={styles.modalSubDesc}>
-              ระบบจะเลือกตัวเลือกเหล่านี้ให้อัตโนมัติเมื่อสั่งอาหารเพื่อความสะดวกรวดเร็ว:
+              ระบบจะเลือกตัวเลือกเหล่านี้ให้อัตโนมัติเมื่อสั่งอาหาร เพื่อให้ได้รสชาติและเงื่อนไขที่คุณชอบทันที:
             </Text>
 
-            <View style={styles.preferencesList}>
-              {savedPreferences.map((pref) => (
-                <TouchableOpacity
-                  key={pref.id}
-                  style={[styles.prefItem, pref.enabled && styles.prefItemActive]}
-                  onPress={() => handleTogglePreference(pref.id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.prefText, pref.enabled && styles.prefTextActive]}>
-                    {pref.label}
-                  </Text>
-                  {pref.enabled ? (
-                    <Icon name="check" size={16} color="#EA580C" strokeWidth={2.5} />
-                  ) : (
-                    <View style={styles.uncheckCircle} />
-                  )}
-                </TouchableOpacity>
-              ))}
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 300 }}>
+              <View style={styles.preferencesList}>
+                {savedPreferences.map((pref) => (
+                  <View
+                    key={pref.id}
+                    style={[styles.prefItem, pref.enabled && styles.prefItemActive]}
+                  >
+                    <TouchableOpacity
+                      style={styles.prefToggleTouch}
+                      onPress={() => handleTogglePreference(pref.id)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.prefCheckBox, pref.enabled && styles.prefCheckBoxActive]}>
+                        {pref.enabled && (
+                          <Icon name="check" size={12} color="#FFFFFF" strokeWidth={3} />
+                        )}
+                      </View>
+                      <Text style={[styles.prefText, pref.enabled && styles.prefTextActive]}>
+                        {pref.label}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {pref.isCustom && (
+                      <TouchableOpacity
+                        style={styles.deletePrefBtn}
+                        onPress={() => handleDeleteCustomPref(pref.id)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Icon name="trash" size={15} color="#EF4444" strokeWidth={2} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+
+            {/* Add Custom Preference Input */}
+            <View style={styles.addPrefInputRow}>
+              <TextInput
+                style={styles.addPrefInput}
+                value={newCustomPref}
+                onChangeText={setNewCustomPref}
+                placeholder="เพิ่มตัวเลือก เช่น ไม่ใส่กระเทียม"
+                placeholderTextColor="#94A3B8"
+              />
+              <TouchableOpacity
+                style={[styles.addPrefBtn, !newCustomPref.trim() && styles.addPrefBtnDisabled]}
+                disabled={!newCustomPref.trim()}
+                onPress={handleAddCustomPref}
+                activeOpacity={0.8}
+              >
+                <Icon name="plus" size={14} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.addPrefBtnText}>เพิ่ม</Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
-              style={styles.modalPrimaryBtn}
-              onPress={() => setShowCustomizationModal(false)}
+              style={[styles.modalPrimaryBtn, { marginTop: 14 }]}
+              onPress={handleSavePreferences}
+              activeOpacity={0.85}
             >
               <Text style={styles.modalPrimaryBtnText}>บันทึกการตั้งค่า</Text>
             </TouchableOpacity>
@@ -617,48 +889,27 @@ export default function ProfileScreen({
       </Modal>
 
       {/* MODAL 3: Favorites List */}
-      <Modal visible={showFavoritesModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalTitleRow}>
-                <Icon name="heart" size={18} color="#E11D48" variant="filled" />
-                <Text style={styles.modalTitle}>รายการโปรดของคุณ</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowFavoritesModal(false)}>
-                <Icon name="close" size={18} color="#64748B" strokeWidth={2} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.favoritesList}>
-              {favoriteItems.map((fav) => (
-                <View key={fav.id} style={styles.favCard}>
-                  <View style={styles.favIconWrap}>
-                    <Icon name="utensils" size={18} color="#EA580C" variant="filled" />
-                  </View>
-                  <View style={styles.favInfo}>
-                    <Text style={styles.favName}>{fav.name}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <Icon name="store" size={10} color="#64748B" strokeWidth={2} />
-                      <Text style={styles.favStall}>{fav.stall}</Text>
-                    </View>
-                    <Text style={styles.favPrice}>฿{fav.price}</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.favOrderBtn}
-                    onPress={() => {
-                      setShowFavoritesModal(false);
-                      if (onNavigateSearch) onNavigateSearch();
-                    }}
-                  >
-                    <Text style={styles.favOrderText}>+ สั่งด่วน</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <FavoritesModal
+        visible={showFavoritesModal}
+        onClose={() => setShowFavoritesModal(false)}
+        favoriteDishes={favoriteDishes}
+        favoriteStallIds={favoriteStallIds}
+        stalls={stalls}
+        onQuickOrderDish={(dish) => {
+          setShowFavoritesModal(false);
+          if (onQuickOrderDish) {
+            onQuickOrderDish(dish);
+          }
+        }}
+        onSelectStall={(stall) => {
+          setShowFavoritesModal(false);
+          if (onSelectStall) {
+            onSelectStall(stall);
+          }
+        }}
+        onToggleFavoriteDish={onToggleFavoriteDish}
+        onToggleFavoriteStall={onToggleFavoriteStall}
+      />
 
       {/* MODAL 4: Building GPS Selector */}
       <Modal visible={showBuildingModal} transparent animationType="fade">
@@ -701,64 +952,460 @@ export default function ProfileScreen({
         </View>
       </Modal>
 
-      {/* MODAL 5: Privacy / Help Dialog */}
-      <Modal visible={!!showInfoModal} transparent animationType="fade">
+      {/* MODAL 5A: Notifications Detail Settings */}
+      <Modal visible={showNotificationModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
-                <Icon
-                  name={showInfoModal === 'privacy' ? 'lock' : 'help'}
-                  size={18}
-                  color={COLORS.primary}
-                  strokeWidth={2}
-                />
-                <Text style={styles.modalTitle}>
-                  {showInfoModal === 'privacy' ? 'ความเป็นส่วนตัวและความปลอดภัย' : 'ศูนย์ช่วยเหลือ (Help Center)'}
-                </Text>
+                <Icon name="bell" size={18} color={COLORS.primary} strokeWidth={2.2} />
+                <Text style={styles.modalTitle}>การแจ้งเตือน (Notifications)</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowInfoModal(null)}>
+              <TouchableOpacity
+                onPress={() => setShowNotificationModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
                 <Icon name="close" size={18} color="#64748B" strokeWidth={2} />
               </TouchableOpacity>
             </View>
 
-            {showInfoModal === 'privacy' ? (
-              <View style={styles.infoContent}>
-                <Text style={styles.infoParagraph}>
-                  ข้อมูลและประวัติการสั่งอาหารของคุณได้รับการเข้ารหัสตามมาตรฐานสากล และใช้เพื่อคำนวณเวลาการเดินเท้าและช่วงเวลาอบอุ่นอาหาร (Predictive Slotting) ภายใน มทส. เท่านั้น
-                </Text>
-                <Text style={styles.infoParagraph}>
-                  ไม่มีการเปิดเผยข้อมูลส่วนบุคคลหรือพิกัดตำแหน่งแก่องค์กรภายนอก
-                </Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+              {/* Master Push Notification Card */}
+              <View style={styles.notifMasterCard}>
+                <View style={styles.notifMasterLeft}>
+                  <View style={styles.notifMasterIconCircle}>
+                    <Icon name="bell" size={18} color={COLORS.primary} variant="filled" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.notifMasterTitle}>เปิดรับการแจ้งเตือนทั้งหมด</Text>
+                    <Text style={styles.notifMasterSub}>รับข้อมูลอัปเดตแบบเรียลไทม์บนอุปกรณ์</Text>
+                  </View>
+                </View>
+                <ModernSwitch
+                  value={notificationsEnabled}
+                  onValueChange={setNotificationsEnabled}
+                  activeTrackColor={COLORS.primary}
+                />
               </View>
-            ) : (
-              <View style={styles.infoContent}>
-                <View style={styles.infoRowItem}>
-                  <Icon name="phone" size={14} color="#475569" strokeWidth={2} />
-                  <Text style={styles.infoParagraph}>
-                    ฝ่ายดูแลสวัสดิการอาหาร มทส.: 044-224-000 ต่อ 8888
-                  </Text>
+
+              {/* Detail Toggles (Disabled style when master is off) */}
+              <View style={[styles.notifGroup, !notificationsEnabled && styles.notifGroupDisabled]}>
+                {/* 1. Order Status */}
+                <View style={styles.notifRow}>
+                  <View style={styles.notifRowLeft}>
+                    <Icon name="orders" size={16} color="#475569" strokeWidth={2} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.notifRowTitle}>สถานะคำสั่งซื้อ & อาหารเสร็จ</Text>
+                      <Text style={styles.notifRowDesc}>
+                        เตือนทันทีเมื่อแม่ค้าเริ่มปรุงและเมื่ออาหารพร้อมรับที่เคาน์เตอร์
+                      </Text>
+                    </View>
+                  </View>
+                  <ModernSwitch
+                    value={orderAlerts && notificationsEnabled}
+                    onValueChange={(val) => notificationsEnabled && setOrderAlerts(val)}
+                    disabled={!notificationsEnabled}
+                    activeTrackColor={COLORS.primary}
+                  />
                 </View>
-                <View style={styles.infoRowItem}>
-                  <Icon name="qr-code" size={14} color="#475569" strokeWidth={2} />
-                  <Text style={styles.infoParagraph}>
-                    LINE Official: @sut-canteen-express
-                  </Text>
+
+                <View style={styles.innerDivider} />
+
+                {/* 2. Promotions & Rewards */}
+                <View style={styles.notifRow}>
+                  <View style={styles.notifRowLeft}>
+                    <Icon name="gift" size={16} color="#475569" strokeWidth={2} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.notifRowTitle}>สิทธิพิเศษ & SUT Points</Text>
+                      <Text style={styles.notifRowDesc}>
+                        แจ้งเตือนดีลลดราคา เมนูแนะนำประจำวัน และแต้มสะสม
+                      </Text>
+                    </View>
+                  </View>
+                  <ModernSwitch
+                    value={promoAlerts && notificationsEnabled}
+                    onValueChange={(val) => notificationsEnabled && setPromoAlerts(val)}
+                    disabled={!notificationsEnabled}
+                    activeTrackColor={COLORS.primary}
+                  />
                 </View>
-                <View style={styles.infoRowItem}>
-                  <Icon name="clock" size={14} color="#475569" strokeWidth={2} />
-                  <Text style={styles.infoParagraph}>
-                    ให้บริการทุกวัน: 07:00 – 19:30 น.
-                  </Text>
+
+                <View style={styles.innerDivider} />
+
+                {/* 3. Sound & Haptics */}
+                <View style={styles.notifRow}>
+                  <View style={styles.notifRowLeft}>
+                    <Icon name="zap" size={16} color="#475569" strokeWidth={2} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.notifRowTitle}>เสียงและระบบสั่น</Text>
+                      <Text style={styles.notifRowDesc}>
+                        ส่งเสียงและสั่นเตือนเมื่อถึงเวลาเดินหรือเมื่ออาหารพร้อม
+                      </Text>
+                    </View>
+                  </View>
+                  <ModernSwitch
+                    value={soundEnabled && notificationsEnabled}
+                    onValueChange={(val) => notificationsEnabled && setSoundEnabled(val)}
+                    disabled={!notificationsEnabled}
+                    activeTrackColor={COLORS.primary}
+                  />
                 </View>
               </View>
-            )}
+            </ScrollView>
 
             <TouchableOpacity
-              style={styles.modalPrimaryBtn}
-              onPress={() => setShowInfoModal(null)}
+              style={[styles.modalPrimaryBtn, { marginTop: 16 }]}
+              onPress={handleSaveNotifications}
+              activeOpacity={0.85}
             >
-              <Text style={styles.modalPrimaryBtnText}>รับทราบ</Text>
+              <Text style={styles.modalPrimaryBtnText}>บันทึกการตั้งค่า</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL 5B: Language Selector */}
+      <Modal visible={showLanguageModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <Icon name="globe" size={18} color={COLORS.primary} strokeWidth={2.2} />
+                <Text style={styles.modalTitle}>เลือกภาษา (Select Language)</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowLanguageModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon name="close" size={18} color="#64748B" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubDesc}>
+              เลือกภาษาที่ต้องการให้แสดงผลในแอปพลิเคชัน:
+            </Text>
+
+            <View style={{ gap: 10, marginVertical: 8 }}>
+              {[
+                { id: 'ไทย (TH)', label: 'ไทย (TH)', sub: 'ภาษาไทย - ระบบและเมนูภาษาไทย', flag: 'TH' },
+                { id: 'English (EN)', label: 'English (EN)', sub: 'English - SUT International', flag: 'EN' },
+              ].map((item) => {
+                const isSelected = language === item.id;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.languageItem, isSelected && styles.languageItemActive]}
+                    onPress={() => handleSelectLanguage(item.id)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.langItemLeft}>
+                      <View style={[styles.langBadge, isSelected && styles.langBadgeActive]}>
+                        <Text style={[styles.langBadgeText, isSelected && styles.langBadgeTextActive]}>
+                          {item.flag}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={[styles.langLabel, isSelected && styles.langLabelActive]}>
+                          {item.label}
+                        </Text>
+                        <Text style={styles.langSub}>{item.sub}</Text>
+                      </View>
+                    </View>
+                    {isSelected && (
+                      <Icon name="check" size={18} color={COLORS.primary} strokeWidth={2.5} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.modalSecondaryBtn, { marginTop: 12 }]}
+              onPress={() => setShowLanguageModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalSecondaryBtnText}>ปิด</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL 5C: Privacy & Security */}
+      <Modal visible={showPrivacyModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '88%' }]}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <Icon name="lock" size={18} color={COLORS.primary} strokeWidth={2.2} />
+                <Text style={styles.modalTitle}>ความเป็นส่วนตัวและความปลอดภัย</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowPrivacyModal(false);
+                  setPasswordError('');
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon name="close" size={18} color="#64748B" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 460 }}>
+              {/* Section 1: Change Password */}
+              <View style={styles.dialogSection}>
+                <Text style={styles.dialogSectionHeading}>เปลี่ยนรหัสผ่านบัญชี</Text>
+
+                {passwordError ? (
+                  <View style={styles.editErrorBanner}>
+                    <Icon name="alert-circle" size={14} color="#EF4444" strokeWidth={2} />
+                    <Text style={styles.editErrorText}>{passwordError}</Text>
+                  </View>
+                ) : null}
+
+                <View style={styles.dialogInputGroup}>
+                  <Text style={styles.dialogInputLabel}>รหัสผ่านปัจจุบัน</Text>
+                  <TextInput
+                    style={styles.dialogTextInput}
+                    value={oldPassword}
+                    onChangeText={(t) => {
+                      setOldPassword(t);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    placeholder="กรอกรหัสผ่านปัจจุบัน"
+                    placeholderTextColor="#94A3B8"
+                    secureTextEntry
+                  />
+                </View>
+
+                <View style={styles.dialogInputGroup}>
+                  <Text style={styles.dialogInputLabel}>รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</Text>
+                  <TextInput
+                    style={styles.dialogTextInput}
+                    value={newPassword}
+                    onChangeText={(t) => {
+                      setNewPassword(t);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    placeholder="กรอกรหัสผ่านใหม่"
+                    placeholderTextColor="#94A3B8"
+                    secureTextEntry
+                  />
+                </View>
+
+                <View style={styles.dialogInputGroup}>
+                  <Text style={styles.dialogInputLabel}>ยืนยันรหัสผ่านใหม่</Text>
+                  <TextInput
+                    style={styles.dialogTextInput}
+                    value={confirmPassword}
+                    onChangeText={(t) => {
+                      setConfirmPassword(t);
+                      if (passwordError) setPasswordError('');
+                    }}
+                    placeholder="กรอกรหัสผ่านใหม่อีกครั้ง"
+                    placeholderTextColor="#94A3B8"
+                    secureTextEntry
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.smallPrimaryBtn, isUpdatingPassword && { opacity: 0.6 }]}
+                  disabled={isUpdatingPassword}
+                  onPress={handleUpdatePassword}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.smallPrimaryBtnText}>
+                    {isUpdatingPassword ? 'กำลังอัปเดต...' : 'อัปเดตรหัสผ่านใหม่'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Section 2: Account Security */}
+              <View style={styles.dialogSection}>
+                <Text style={styles.dialogSectionHeading}>ความปลอดภัยของบัญชี</Text>
+
+                <View style={styles.settingRowCompact}>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.settingRowCompactTitle}>เข้าสู่ระบบด้วยลายนิ้วมือ / Face ID</Text>
+                    <Text style={styles.settingRowCompactSub}>ปลดล็อกแอปและยืนยันการชำระเงินรวดเร็ว</Text>
+                  </View>
+                  <ModernSwitch
+                    value={biometricEnabled}
+                    onValueChange={setBiometricEnabled}
+                    activeTrackColor={COLORS.primary}
+                  />
+                </View>
+
+                <View style={styles.innerDivider} />
+
+                <View style={styles.settingRowCompact}>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={styles.settingRowCompactTitle}>จดจำการเข้าสู่ระบบ</Text>
+                    <Text style={styles.settingRowCompactSub}>คงสถานะเข้าสู่ระบบไว้ในอุปกรณ์นี้</Text>
+                  </View>
+                  <ModernSwitch
+                    value={rememberMePref}
+                    onValueChange={setRememberMePref}
+                    activeTrackColor={COLORS.primary}
+                  />
+                </View>
+              </View>
+
+              {/* Section 3: Data & Cache */}
+              <View style={styles.dialogSection}>
+                <Text style={styles.dialogSectionHeading}>ข้อมูลและแคชชั่วคราว</Text>
+                <TouchableOpacity
+                  style={styles.clearCacheBtn}
+                  onPress={handleClearCache}
+                  activeOpacity={0.8}
+                >
+                  <Icon name="trash" size={15} color="#DC2626" strokeWidth={2} />
+                  <Text style={styles.clearCacheBtnText}>ล้างประวัติการค้นหาและไฟล์แคชชั่วคราว</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Section 4: SUT PDPA Policy */}
+              <View style={styles.pdpaCard}>
+                <View style={styles.pdpaHeaderRow}>
+                  <Icon name="shield" size={15} color="#0284C7" strokeWidth={2} />
+                  <Text style={styles.pdpaTitle}>นโยบายคุ้มครองข้อมูลส่วนบุคคล (SUT PDPA)</Text>
+                </View>
+                <Text style={styles.pdpaText}>
+                  ข้อมูลโปรไฟล์ ประวัติการสั่งอาหาร และพิกัดตำแหน่งอาคารของคุณได้รับการเข้ารหัสความปลอดภัยตามมาตรฐาน มทส. และนำมาประมวลผลเพื่อการคำนวณเวลาการเดินเท้าและช่วงเวลาอบอุ่นอาหาร (Predictive Slotting) ภายในมหาวิทยาลัยเท่านั้น ไม่มีการเผยแพร่หรือนำไปใช้ภายนอก
+                </Text>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.modalSecondaryBtn, { marginTop: 12 }]}
+              onPress={() => {
+                setShowPrivacyModal(false);
+                setPasswordError('');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalSecondaryBtnText}>ปิดหน้าต่าง</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL 5D: Help Center */}
+      <Modal visible={showHelpModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <Icon name="help" size={18} color={COLORS.primary} strokeWidth={2.2} />
+                <Text style={styles.modalTitle}>ศูนย์ช่วยเหลือ (Help Center)</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowHelpModal(false)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon name="close" size={18} color="#64748B" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 480 }}>
+              {/* Section 1: FAQs Accordion */}
+              <Text style={styles.dialogSectionHeading}>คำถามที่พบบ่อย (FAQs)</Text>
+              <View style={{ gap: 8, marginBottom: 18 }}>
+                {faqs.map((faq, idx) => {
+                  const isExpanded = expandedFaqIndex === idx;
+                  return (
+                    <View key={idx} style={[styles.faqCard, isExpanded && styles.faqCardActive]}>
+                      <TouchableOpacity
+                        style={styles.faqQuestionRow}
+                        onPress={() => setExpandedFaqIndex(isExpanded ? null : idx)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.faqQuestionText, isExpanded && styles.faqQuestionTextActive]}>
+                          {faq.q}
+                        </Text>
+                        <Icon
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={15}
+                          color={isExpanded ? COLORS.primary : '#64748B'}
+                          strokeWidth={2.5}
+                        />
+                      </TouchableOpacity>
+                      {isExpanded && (
+                        <View style={styles.faqAnswerBox}>
+                          <Text style={styles.faqAnswerText}>{faq.a}</Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+
+              {/* Section 2: Direct Contacts */}
+              <Text style={styles.dialogSectionHeading}>ช่องทางติดต่อฝ่ายสวัสดิการอาหาร มทส.</Text>
+              <View style={styles.contactsCard}>
+                <View style={styles.contactRow}>
+                  <View style={styles.contactIconCircle}>
+                    <Icon name="phone" size={15} color={COLORS.primary} strokeWidth={2} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.contactLabel}>โทรศัพท์ประสานงาน</Text>
+                    <Text style={styles.contactValue}>044-224-000 ต่อ 8888</Text>
+                  </View>
+                </View>
+
+                <View style={styles.innerDivider} />
+
+                <View style={styles.contactRow}>
+                  <View style={styles.contactIconCircle}>
+                    <Icon name="qr-code" size={15} color="#16A34A" strokeWidth={2} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.contactLabel}>LINE Official Account</Text>
+                    <Text style={styles.contactValue}>@sut-canteen-express</Text>
+                  </View>
+                </View>
+
+                <View style={styles.innerDivider} />
+
+                <View style={styles.contactRow}>
+                  <View style={styles.contactIconCircle}>
+                    <Icon name="clock" size={15} color="#EA580C" strokeWidth={2} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.contactLabel}>เวลาทำการฝ่ายดูแลโรงอาหาร</Text>
+                    <Text style={styles.contactValue}>ทุกวัน 07:00 – 19:30 น.</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Section 3: Feedback Form */}
+              <Text style={styles.dialogSectionHeading}>แจ้งปัญหาหรือข้อเสนอแนะ</Text>
+              <View style={styles.feedbackCard}>
+                <TextInput
+                  style={styles.feedbackInput}
+                  value={feedbackText}
+                  onChangeText={setFeedbackText}
+                  placeholder="พิมพ์ข้อความแจ้งปัญหา หรือข้อเสนอแนะเพื่อพัฒนาบริการ..."
+                  placeholderTextColor="#94A3B8"
+                  multiline
+                  numberOfLines={3}
+                />
+                <TouchableOpacity
+                  style={[styles.smallPrimaryBtn, !feedbackText.trim() && { opacity: 0.5 }]}
+                  disabled={!feedbackText.trim()}
+                  onPress={handleSendFeedback}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.smallPrimaryBtnText}>ส่งเรื่องถึงเจ้าหน้าที่</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.modalSecondaryBtn, { marginTop: 12 }]}
+              onPress={() => setShowHelpModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.modalSecondaryBtnText}>ปิดหน้าต่าง</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -912,9 +1559,9 @@ export default function ProfileScreen({
                   <Text style={styles.formLabel}>เพศ (Gender)</Text>
                   <View style={styles.genderRow}>
                     {[
-                      { id: 'ชาย', label: 'ชาย', icon: '👨' },
-                      { id: 'หญิง', label: 'หญิง', icon: '👩' },
-                      { id: 'ไม่ระบุ', label: 'ไม่ระบุ', icon: '✨' },
+                      { id: 'ชาย', label: 'ชาย' },
+                      { id: 'หญิง', label: 'หญิง' },
+                      { id: 'ไม่ระบุ', label: 'ไม่ระบุ' },
                     ].map((g) => {
                       const isSelected = editGender === g.id;
                       return (
@@ -927,7 +1574,6 @@ export default function ProfileScreen({
                           onPress={() => setEditGender(g.id)}
                           activeOpacity={0.8}
                         >
-                          <Text style={styles.genderChipEmoji}>{g.icon}</Text>
                           <Text
                             style={[
                               styles.genderChipText,
@@ -2029,5 +2675,414 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.extraBold,
     color: '#FFFFFF',
     fontSize: 14,
+  },
+  // Setting Row Text Col
+  settingTextCol: {
+    flex: 1,
+  },
+  // Saved Customizations Enhancements
+  prefToggleTouch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  prefCheckBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  prefCheckBoxActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  deletePrefBtn: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  addPrefInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  addPrefInput: {
+    ...TYPOGRAPHY.regular,
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  addPrefBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  addPrefBtnDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#94A3B8',
+  },
+  addPrefBtnText: {
+    ...TYPOGRAPHY.bold,
+    color: '#FFFFFF',
+    fontSize: 13,
+  },
+  // Notifications Modal Styles
+  notifMasterCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1.5,
+    borderColor: '#FED7AA',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  notifMasterLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    paddingRight: 8,
+  },
+  notifMasterIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifMasterTitle: {
+    ...TYPOGRAPHY.bold,
+    color: '#C2410C',
+    fontSize: 14,
+  },
+  notifMasterSub: {
+    ...TYPOGRAPHY.regular,
+    color: '#9A3412',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  notifGroup: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    gap: 10,
+  },
+  notifGroupDisabled: {
+    opacity: 0.45,
+  },
+  notifRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  notifRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    flex: 1,
+    paddingRight: 10,
+  },
+  notifRowTitle: {
+    ...TYPOGRAPHY.bold,
+    color: '#1E293B',
+    fontSize: 13,
+  },
+  notifRowDesc: {
+    ...TYPOGRAPHY.regular,
+    color: '#64748B',
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  innerDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 4,
+  },
+  // Language Modal Styles
+  languageItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  languageItemActive: {
+    backgroundColor: '#FFF7ED',
+    borderColor: COLORS.primary,
+  },
+  langItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  langBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  langBadgeActive: {
+    backgroundColor: COLORS.primary,
+  },
+  langBadgeText: {
+    ...TYPOGRAPHY.black,
+    color: '#475569',
+    fontSize: 13,
+  },
+  langBadgeTextActive: {
+    color: '#FFFFFF',
+  },
+  langLabel: {
+    ...TYPOGRAPHY.bold,
+    color: '#1E293B',
+    fontSize: 14,
+  },
+  langLabelActive: {
+    color: COLORS.primary,
+  },
+  langSub: {
+    ...TYPOGRAPHY.regular,
+    color: '#64748B',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  modalSecondaryBtn: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalSecondaryBtnText: {
+    ...TYPOGRAPHY.bold,
+    color: '#475569',
+    fontSize: 13,
+  },
+  // Privacy & Help Dialog Styles
+  dialogSection: {
+    marginBottom: 18,
+  },
+  dialogSectionHeading: {
+    ...TYPOGRAPHY.bold,
+    color: '#0F172A',
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  dialogInputGroup: {
+    marginBottom: 10,
+  },
+  dialogInputLabel: {
+    ...TYPOGRAPHY.medium,
+    color: '#475569',
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  dialogTextInput: {
+    ...TYPOGRAPHY.regular,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  smallPrimaryBtn: {
+    backgroundColor: COLORS.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  smallPrimaryBtnText: {
+    ...TYPOGRAPHY.bold,
+    color: '#FFFFFF',
+    fontSize: 12,
+  },
+  settingRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
+  settingRowCompactTitle: {
+    ...TYPOGRAPHY.bold,
+    color: '#1E293B',
+    fontSize: 13,
+  },
+  settingRowCompactSub: {
+    ...TYPOGRAPHY.regular,
+    color: '#64748B',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  clearCacheBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+  },
+  clearCacheBtnText: {
+    ...TYPOGRAPHY.bold,
+    color: '#DC2626',
+    fontSize: 12,
+  },
+  pdpaCard: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  pdpaHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  pdpaTitle: {
+    ...TYPOGRAPHY.bold,
+    color: '#0369A1',
+    fontSize: 12,
+  },
+  pdpaText: {
+    ...TYPOGRAPHY.regular,
+    color: '#0C4A6E',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  // FAQs Styles
+  faqCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  faqCardActive: {
+    borderColor: '#FDBA74',
+    backgroundColor: '#FFFBF7',
+  },
+  faqQuestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+  },
+  faqQuestionText: {
+    ...TYPOGRAPHY.bold,
+    color: '#1E293B',
+    fontSize: 12,
+    flex: 1,
+    paddingRight: 8,
+  },
+  faqQuestionTextActive: {
+    color: '#C2410C',
+  },
+  faqAnswerBox: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#FED7AA',
+  },
+  faqAnswerText: {
+    ...TYPOGRAPHY.regular,
+    color: '#475569',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  contactsCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginBottom: 18,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  contactIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactLabel: {
+    ...TYPOGRAPHY.medium,
+    color: '#64748B',
+    fontSize: 10,
+  },
+  contactValue: {
+    ...TYPOGRAPHY.bold,
+    color: '#0F172A',
+    fontSize: 12,
+    marginTop: 1,
+  },
+  feedbackCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginBottom: 8,
+  },
+  feedbackInput: {
+    ...TYPOGRAPHY.regular,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 12,
+    color: '#0F172A',
+    minHeight: 70,
+    textAlignVertical: 'top',
+    marginBottom: 10,
   },
 });

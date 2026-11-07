@@ -1,4 +1,4 @@
-// Consumer Orders & Activity Screen inspired by Grab's clean layout & SUT Canteen Design System
+// Consumer Orders & Activity Screen with Food-First Visuals & SUT Canteen Design System
 import React, { useState } from 'react';
 import {
   View,
@@ -7,22 +7,60 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Image,
+  Modal,
 } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import { FONT_FAMILY, TYPOGRAPHY } from '../../constants/typography';
 import DigitalPassModal from '../../components/DigitalPassModal';
 import Icon from '../../components/common/Icon';
+import { getFoodImageFallback, getStallImageFallback } from '../../utils/imageUtils';
+
+/**
+ * Image thumbnail with error fallback handling
+ */
+function OrderStallThumbnail({ uri, fallbackUri, isGrabAndGo, size = 64 }) {
+  const [currentUri, setCurrentUri] = useState(uri);
+  const [hasError, setHasError] = useState(false);
+
+  return (
+    <View style={[styles.thumbnailWrapper, { width: size, height: size }]}>
+      <Image
+        source={{ uri: hasError ? fallbackUri : currentUri }}
+        onError={() => {
+          if (!hasError) {
+            setHasError(true);
+            setCurrentUri(fallbackUri);
+          }
+        }}
+        style={[styles.thumbnailImage, { width: size, height: size }]}
+        resizeMode="cover"
+      />
+      {isGrabAndGo && (
+        <View style={styles.grabBadgeOverlay}>
+          <Icon name="zap" size={9} color="#FFFFFF" variant="filled" />
+        </View>
+      )}
+    </View>
+  );
+}
 
 export default function OrderTrackingView({
   orders = [],
   currentUser = null,
-  rewardsPoints = 1200,
-  walletBalance = 150,
+  rewardsPoints = 0,
+  walletBalance = 0,
+  stalls = [],
+  canteens = [],
   onNavigateHome,
+  onSelectStall,
   onCompletePickup,
   onReleaseOrderNow,
 }) {
   const [selectedPassOrder, setSelectedPassOrder] = useState(null);
+  const [showRewardsModal, setShowRewardsModal] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all'); // 'all' | 'active' | 'completed'
+  const [ratings, setRatings] = useState({}); // { [orderId]: number }
 
   // Separate active in-progress orders from completed past orders
   const activeOrders = orders.filter(
@@ -30,7 +68,7 @@ export default function OrderTrackingView({
   );
   const completedOrders = orders.filter((o) => o.status === 'COMPLETED');
 
-  // Format date helper in Thai matching Grab (เช่น 07 ก.ย. 2026, 14:02 น.)
+  // Format date helper in Thai (เช่น 10 ก.ย. 2026, 21:14 น.)
   const formatDateThai = (isoDate) => {
     if (!isoDate) return 'วันนี้';
     try {
@@ -48,6 +86,104 @@ export default function OrderTrackingView({
     } catch (e) {
       return 'วันนี้';
     }
+  };
+
+  // Resolve best matching stall / food image for an order
+  const getOrderImage = (order) => {
+    if (order.stallImage || order.stallImageUrl) {
+      return order.stallImage || order.stallImageUrl;
+    }
+    if (order.items?.[0]?.image || order.items?.[0]?.imageUrl) {
+      return order.items[0].image || order.items[0].imageUrl;
+    }
+
+    // Match stall in stalls array
+    if (stalls && stalls.length > 0) {
+      const matched = stalls.find(
+        (s) =>
+          (order.stallId && s.id === order.stallId) ||
+          (order.stallName && (
+            s.thaiName === order.stallName ||
+            s.name === order.stallName ||
+            order.stallName.includes(s.thaiName) ||
+            (s.thaiName && s.thaiName.includes(order.stallName))
+          ))
+      );
+      if (matched?.imageUrl) {
+        return matched.imageUrl;
+      }
+    }
+
+    // Fallback by stall name
+    if (order.stallName) {
+      return getStallImageFallback(order.stallName);
+    }
+
+    // Fallback by first food item
+    const firstFood = order.items?.[0]?.name;
+    if (firstFood) {
+      return getFoodImageFallback(firstFood);
+    }
+
+    return 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=600&q=80';
+  };
+
+  // Clean stall name for display (strip unnecessary prefixes)
+  const getCleanStallName = (rawName) => {
+    if (!rawName) return 'ร้านอาหาร มทส.';
+    return rawName.replace(/^หน้าร้าน\s*/, '').trim() || rawName;
+  };
+
+  // Summarize items for list display
+  const getItemsSummary = (items) => {
+    if (!items || items.length === 0) return 'รายการอาหาร มทส.';
+    return items
+      .map((it) => `${it.name || 'อาหาร'}${it.qty > 1 ? ` x${it.qty}` : ''}`)
+      .join(', ');
+  };
+
+  // Handle reorder click
+  const handleReorder = (order) => {
+    if (onSelectStall && stalls && stalls.length > 0) {
+      const matched = stalls.find(
+        (s) =>
+          (order.stallId && s.id === order.stallId) ||
+          (order.stallName && (
+            s.thaiName === order.stallName ||
+            s.name === order.stallName ||
+            order.stallName.includes(s.thaiName) ||
+            (s.thaiName && s.thaiName.includes(order.stallName))
+          ))
+      );
+
+      if (matched) {
+        if (matched.isOpen === false) {
+          Alert.alert(
+            'ร้านปิดชั่วคราว',
+            `ร้าน "${matched.thaiName || matched.name}" ปิดให้บริการอยู่ในขณะนี้`
+          );
+          return;
+        }
+        onSelectStall(matched);
+        return;
+      }
+    }
+
+    if (onNavigateHome) {
+      onNavigateHome();
+    }
+  };
+
+  // Handle rating tap
+  const handleRateOrder = (order, starIndex) => {
+    setRatings((prev) => ({
+      ...prev,
+      [order.id]: starIndex,
+    }));
+    Alert.alert(
+      'ขอบคุณสำหรับการประเมิน',
+      `คุณได้ให้คะแนนร้าน ${getCleanStallName(order.stallName)} จำนวน ${starIndex} ดาว`
+    );
   };
 
   const getStatusDisplay = (order) => {
@@ -98,60 +234,148 @@ export default function OrderTrackingView({
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* 1. Grab-style Top Header (รายการ + ประวัติ) */}
+      {/* 1. Header with Title & Filter Switch */}
       <View style={styles.topHeader}>
-        <Text style={styles.headerTitle}>รายการ</Text>
+        <View>
+          <Text style={styles.headerTitle}>รายการ</Text>
+          <Text style={styles.headerSubtitle}>ติดตามคิวและประวัติคำสั่งซื้อ</Text>
+        </View>
+
         <TouchableOpacity
-          style={styles.historyBtn}
-          onPress={() => Alert.alert('ประวัติคำสั่งซื้อ', 'ระบบบันทึกประวัติคำสั่งซื้อทั้งหมดของคุณไว้เรียบร้อยแล้ว')}
+          style={[
+            styles.historyBtn,
+            activeFilter === 'completed' && styles.historyBtnActive,
+          ]}
+          onPress={() => {
+            setActiveFilter((prev) => (prev === 'completed' ? 'all' : 'completed'));
+          }}
           activeOpacity={0.8}
         >
-          <Icon name="clock" size={14} color={COLORS.textPrimary} strokeWidth={2.2} style={{ marginRight: 5 }} />
-          <Text style={styles.historyBtnText}>ประวัติ</Text>
+          <Icon
+            name="clock"
+            size={14}
+            color={activeFilter === 'completed' ? '#FFFFFF' : COLORS.textPrimary}
+            strokeWidth={2.2}
+            style={{ marginRight: 5 }}
+          />
+          <Text
+            style={[
+              styles.historyBtnText,
+              activeFilter === 'completed' && styles.historyBtnTextActive,
+            ]}
+          >
+            ประวัติ
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Filter Segment Tabs */}
+      <View style={styles.filterBar}>
+        <TouchableOpacity
+          style={[styles.filterChip, activeFilter === 'all' && styles.filterChipActive]}
+          onPress={() => setActiveFilter('all')}
+          activeOpacity={0.75}
+        >
+          <Text
+            style={[
+              styles.filterChipText,
+              activeFilter === 'all' && styles.filterChipTextActive,
+            ]}
+          >
+            ทั้งหมด ({orders.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterChip, activeFilter === 'active' && styles.filterChipActive]}
+          onPress={() => setActiveFilter('active')}
+          activeOpacity={0.75}
+        >
+          <Text
+            style={[
+              styles.filterChipText,
+              activeFilter === 'active' && styles.filterChipTextActive,
+            ]}
+          >
+            กำลังดำเนินการ ({activeOrders.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.filterChip, activeFilter === 'completed' && styles.filterChipActive]}
+          onPress={() => setActiveFilter('completed')}
+          activeOpacity={0.75}
+        >
+          <Text
+            style={[
+              styles.filterChipText,
+              activeFilter === 'completed' && styles.filterChipTextActive,
+            ]}
+          >
+            สำเร็จแล้ว ({completedOrders.length})
+          </Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.content}>
-        {/* 2. Grab-style Rewards Points Card (Banner) */}
+        {/* 2. SUT Rewards Points Card */}
         <View style={styles.rewardsCard}>
           <View style={styles.rewardsTopRow}>
             <View style={styles.giftIconCircle}>
-              <Icon name="gift" size={24} color={COLORS.primary} strokeWidth={2} />
+              <Icon name="gift" size={22} color={COLORS.primary} strokeWidth={2} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rewardsTitle}>
-                ขณะนี้คุณมี {rewardsPoints} SUT Points
-              </Text>
+              <View style={styles.rewardsHeaderBadgeRow}>
+                <Text style={styles.rewardsTitle}>
+                  ขณะนี้คุณมี {rewardsPoints} SUT Points
+                </Text>
+              </View>
               <Text style={styles.rewardsSub}>
-                ใช้คะแนนแลกสิทธิพิเศษและส่วนลดโรงอาหารได้มากมาย!
+                ใช้คะแนนสะสมแลกสิทธิพิเศษและส่วนลดโรงอาหารได้มากมาย
               </Text>
             </View>
           </View>
+
           <TouchableOpacity
             style={styles.findPointsLink}
-            onPress={() => Alert.alert('SUT Points', 'คุณสามารถสะสมคะแนนจากการสั่งอาหารและนำมาแลกส่วนลดในแอปได้')}
-            activeOpacity={0.7}
+            onPress={() => setShowRewardsModal(true)}
+            activeOpacity={0.75}
           >
-            <Text style={styles.findPointsText}>ค้นหา SUT Points →</Text>
+            <Text style={styles.findPointsText}>ดูสิทธิพิเศษและส่วนลด</Text>
+            <Icon name="arrow-right" size={13} color="#0284C7" strokeWidth={2.2} style={{ marginLeft: 4 }} />
           </TouchableOpacity>
         </View>
 
-        {/* 3. Live Active Orders (ถ้ามีออเดอร์ที่กำลังปรุง/กำลังรอ) */}
-        {activeOrders.length > 0 && (
+        {/* 3. Live Active Orders (ถ้ามีออเดอร์ที่กำลังปรุง/รอรับ) */}
+        {(activeFilter === 'all' || activeFilter === 'active') && activeOrders.length > 0 && (
           <View style={styles.activeSection}>
             <Text style={styles.sectionTitle}>กำลังดำเนินการ ({activeOrders.length})</Text>
             {activeOrders.map((order) => {
               const statusInfo = getStatusDisplay(order);
               const isFinished = order.status === 'READY' || order.status === 'READY_FOR_PICKUP';
+              const stallImg = getOrderImage(order);
+              const cleanTitle = getCleanStallName(order.stallName);
 
               return (
                 <View key={order.id} style={styles.activeOrderCard}>
-                  {/* Order Top Bar */}
+                  {/* Order Top Bar with Stall Image & Queue */}
                   <View style={styles.orderTopBar}>
-                    <View>
-                      <Text style={styles.activeQueueNum}>คิว #{order.orderNumber}</Text>
-                      <Text style={styles.activeOrderId}>ID: {order.id}</Text>
+                    <View style={styles.activeHeaderLeft}>
+                      <OrderStallThumbnail
+                        uri={stallImg}
+                        fallbackUri={getStallImageFallback(cleanTitle)}
+                        isGrabAndGo={order.type === 'GRAB_AND_GO'}
+                        size={52}
+                      />
+                      <View style={{ marginLeft: 10, flex: 1 }}>
+                        <Text style={styles.activeQueueNum}>คิว #{order.orderNumber}</Text>
+                        <Text style={styles.activeShopName} numberOfLines={1}>{cleanTitle}</Text>
+                        <Text style={styles.activeCanteenName} numberOfLines={1}>
+                          {order.canteenName || 'โรงอาหาร มทส.'}
+                        </Text>
+                      </View>
                     </View>
+
                     <View style={[styles.statusBadge, { backgroundColor: statusInfo.badgeBg }]}>
                       <Text style={[styles.statusBadgeText, { color: statusInfo.color }]}>
                         {statusInfo.title}
@@ -184,10 +408,8 @@ export default function OrderTrackingView({
                     })}
                   </View>
 
-                  {/* Shop and Items */}
+                  {/* Shop and Items List */}
                   <View style={styles.shopInfoBox}>
-                    <Text style={styles.activeShopName}>{order.stallName || 'ร้านอาหาร มทส.'}</Text>
-                    <Text style={styles.activeCanteenName}>{order.canteenName || 'โรงอาหาร มทส.'}</Text>
                     {order.items?.map((it, idx) => (
                       <View key={idx} style={{ marginTop: 4 }}>
                         <View style={styles.activeItemRow}>
@@ -207,13 +429,13 @@ export default function OrderTrackingView({
                     {!!order.specialNotes && (
                       <View style={styles.activeSpecialNotesBox}>
                         <Text style={styles.activeSpecialNotesText}>
-                          📝 โน้ตคำขอพิเศษ: {order.specialNotes}
+                          โน้ตคำขอพิเศษ: {order.specialNotes}
                         </Text>
                       </View>
                     )}
                   </View>
 
-                  {/* If Holding in Cloud: Show Fast-Track Button to immediately send to KDS without waiting! */}
+                  {/* Fast-Track Button (If Holding in Cloud) */}
                   {order.status === 'HOLDING_IN_CLOUD' && (
                     <TouchableOpacity
                       style={styles.fastTrackBtn}
@@ -222,7 +444,7 @@ export default function OrderTrackingView({
                     >
                       <Icon name="zap" size={15} color="#FFFFFF" variant="filled" style={{ marginRight: 6 }} />
                       <Text style={styles.fastTrackBtnText}>
-                        ⚡ เร่งส่งเข้าครัวทันที (ไม่ต้องรอเวลา)
+                        เร่งส่งเข้าครัวทันที (ไม่ต้องรอเวลา)
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -244,14 +466,25 @@ export default function OrderTrackingView({
           </View>
         )}
 
-        {/* 4. Section Title: "ล่าสุด" (Recent) matching Grab */}
-        <Text style={styles.sectionTitle}>ล่าสุด</Text>
+        {/* 4. Section Title: "ล่าสุด" (Recent) */}
+        {(activeFilter === 'all' || activeFilter === 'completed') && (
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>
+              {activeFilter === 'completed' ? 'ประวัติคำสั่งซื้อ' : 'ล่าสุด'}
+            </Text>
+            {completedOrders.length > 0 && (
+              <Text style={styles.sectionCounterText}>
+                {completedOrders.length} รายการ
+              </Text>
+            )}
+          </View>
+        )}
 
-        {/* 5. If Empty State (ผู้ใช้พึ่งสมัครยังไม่ได้สั่งเลย ให้เป็นหน้าโล่งๆ ไว้ก่อน) */}
+        {/* 5. Empty State */}
         {orders.length === 0 ? (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
-              <Icon name="orders" size={40} color={COLORS.primary} strokeWidth={2} />
+              <Icon name="orders" size={38} color={COLORS.primary} strokeWidth={2} />
             </View>
             <Text style={styles.emptyTitle}>ยังไม่มีรายการคำสั่งซื้อ</Text>
             <Text style={styles.emptySubtitle}>
@@ -262,70 +495,147 @@ export default function OrderTrackingView({
               onPress={onNavigateHome}
               activeOpacity={0.85}
             >
-              <Text style={styles.startOrderBtnText}>สั่งอาหารเลย →</Text>
+              <Text style={styles.startOrderBtnText}>ค้นหาอาหารและสั่งเลย</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          /* 6. Grab-style Transaction / Recent Orders List */
-          <View style={styles.recentList}>
-            {completedOrders.map((order) => (
-              <View key={order.id} style={styles.grabItemRow}>
-                {/* Left Food Plate Circle Icon */}
-                <View style={styles.foodIconCircle}>
-                  <Icon name="burger" size={20} color={COLORS.primary} strokeWidth={2} />
-                </View>
+          /* 6. Food-First Orders List */
+          <View style={styles.recentCardsContainer}>
+            {(activeFilter === 'all' || activeFilter === 'completed') &&
+              completedOrders.map((order) => {
+                const stallImg = getOrderImage(order);
+                const cleanTitle = getCleanStallName(order.stallName);
+                const itemsSummary = getItemsSummary(order.items);
+                const userRating = ratings[order.id] || 0;
 
-                {/* Center Details */}
-                <View style={styles.itemCenterCol}>
-                  <Text style={styles.grabShopTitle} numberOfLines={1}>
-                    {order.stallName || 'ร้านอาหาร มทส.'} - {order.canteenName || 'โรงอาหาร'}
-                  </Text>
-                  <Text style={styles.grabDateText}>
-                    {formatDateThai(order.createdAt)}
-                  </Text>
-
-                  {/* Rating Stars matching Grab */}
-                  <View style={styles.starsRow}>
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <Icon
-                        key={star}
-                        name="star"
-                        size={13}
-                        color="#CBD5E1"
-                        strokeWidth={1.5}
-                        style={{ marginRight: 3 }}
+                return (
+                  <View key={order.id} style={styles.orderCard}>
+                    {/* Top Row: Stall Photo + Shop Details + Price */}
+                    <View style={styles.orderCardTopRow}>
+                      {/* Left: Stall / Food Photo Thumbnail */}
+                      <OrderStallThumbnail
+                        uri={stallImg}
+                        fallbackUri={getStallImageFallback(cleanTitle)}
+                        isGrabAndGo={order.type === 'GRAB_AND_GO'}
+                        size={64}
                       />
-                    ))}
+
+                      {/* Center: Stall info & Location */}
+                      <View style={styles.orderCardCenterCol}>
+                        <Text style={styles.stallTitleText} numberOfLines={1}>
+                          {cleanTitle}
+                        </Text>
+
+                        <View style={styles.locationRow}>
+                          <Icon name="location" size={11} color={COLORS.textMuted} style={{ marginRight: 3 }} />
+                          <Text style={styles.canteenSubText} numberOfLines={1}>
+                            {order.canteenName || 'โรงอาหาร มทส.'}
+                          </Text>
+                        </View>
+
+                        <Text style={styles.orderDateText}>
+                          {formatDateThai(order.createdAt)}
+                        </Text>
+                      </View>
+
+                      {/* Right: Price & Status Tag */}
+                      <View style={styles.orderCardRightCol}>
+                        <Text style={styles.orderPriceText}>฿{order.totalAmount}</Text>
+                        <View style={styles.completedTag}>
+                          <Icon name="check" size={10} color={COLORS.green} strokeWidth={2.5} style={{ marginRight: 3 }} />
+                          <Text style={styles.completedTagText}>สำเร็จ</Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Divider */}
+                    <View style={styles.orderCardDivider} />
+
+                    {/* Items Summary Row */}
+                    <View style={styles.itemsSummaryRow}>
+                      <Text style={styles.itemsSummaryLabel}>เมนู:</Text>
+                      <Text style={styles.itemsSummaryText} numberOfLines={1}>
+                        {itemsSummary}
+                      </Text>
+                    </View>
+
+                    {/* Bottom Row: Rating + Reorder Button */}
+                    <View style={styles.orderCardBottomRow}>
+                      {/* Left: Interactive Rating Stars */}
+                      <View style={styles.ratingSection}>
+                        {userRating > 0 ? (
+                          <View style={styles.ratedBox}>
+                            <View style={styles.starsRow}>
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Icon
+                                  key={s}
+                                  name="star"
+                                  size={13}
+                                  color={s <= userRating ? '#F59E0B' : '#E2E8F0'}
+                                  variant={s <= userRating ? 'filled' : 'outline'}
+                                  strokeWidth={1.5}
+                                  style={{ marginRight: 2 }}
+                                />
+                              ))}
+                            </View>
+                            <Text style={styles.ratedScoreText}>({userRating}.0)</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.unratedBox}>
+                            <Text style={styles.ratePromptText}>ให้คะแนน:</Text>
+                            <View style={styles.starsRow}>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <TouchableOpacity
+                                  key={star}
+                                  onPress={() => handleRateOrder(order, star)}
+                                  hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                                  activeOpacity={0.7}
+                                >
+                                  <Icon
+                                    name="star"
+                                    size={14}
+                                    color="#CBD5E1"
+                                    strokeWidth={1.5}
+                                    style={{ marginRight: 3 }}
+                                  />
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Right: Reorder Pill Button */}
+                      <TouchableOpacity
+                        style={styles.reorderPillBtn}
+                        onPress={() => handleReorder(order)}
+                        activeOpacity={0.8}
+                      >
+                        <Icon
+                          name="refresh"
+                          size={12}
+                          color={COLORS.primary}
+                          strokeWidth={2.2}
+                          style={{ marginRight: 4 }}
+                        />
+                        <Text style={styles.reorderPillText}>สั่งซื้ออีกครั้ง</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
+                );
+              })}
 
-                  {/* Reorder Link matching Grab */}
-                  <TouchableOpacity
-                    style={styles.reorderLink}
-                    onPress={onNavigateHome}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.reorderLinkText}>สั่งซื้ออีกครั้ง →</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Right Price */}
-                <View style={styles.priceRightCol}>
-                  <Text style={styles.grabPriceBold}>฿{order.totalAmount}</Text>
-                </View>
-              </View>
-            ))}
-
-            {/* If wallet has balance, show recent wallet top-up transaction item */}
-            {walletBalance > 0 && (
-              <View style={styles.grabItemRow}>
+            {/* Wallet top-up transaction card if balance exists */}
+            {(activeFilter === 'all' || activeFilter === 'completed') && walletBalance > 0 && (
+              <View style={styles.walletCard}>
                 <View style={styles.walletIconCircle}>
-                  <Icon name="wallet" size={18} color={COLORS.primary} strokeWidth={2} />
+                  <Icon name="wallet" size={20} color={COLORS.primary} strokeWidth={2} />
                 </View>
-                <View style={styles.itemCenterCol}>
-                  <Text style={styles.grabShopTitle}>เติมเงิน SUT Canteen Wallet</Text>
-                  <Text style={styles.grabDateText}>วันนี้, ระบบพร้อมใช้งาน</Text>
+                <View style={styles.orderCardCenterCol}>
+                  <Text style={styles.stallTitleText}>เติมเงิน SUT Canteen Wallet</Text>
+                  <Text style={styles.orderDateText}>ยอดเงินพร้อมใช้งานในโรงอาหาร มทส.</Text>
                 </View>
-                <View style={styles.priceRightCol}>
+                <View style={styles.orderCardRightCol}>
                   <Text style={styles.walletPriceOrange}>฿{walletBalance}.00</Text>
                 </View>
               </View>
@@ -335,6 +645,89 @@ export default function OrderTrackingView({
       </View>
 
       <View style={{ height: 60 }} />
+
+      {/* SUT Points Modal */}
+      <Modal
+        visible={showRewardsModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRewardsModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.rewardsModalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderTitleRow}>
+                <Icon name="gift" size={20} color={COLORS.primary} strokeWidth={2} style={{ marginRight: 8 }} />
+                <Text style={styles.modalTitle}>SUT Points Rewards</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setShowRewardsModal(false)}
+                style={styles.modalCloseBtn}
+              >
+                <Icon name="close" size={18} color={COLORS.textSecondary} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalPointsBadge}>
+              <Text style={styles.modalPointsLabel}>คะแนนสะสมปัจจุบันของคุณ</Text>
+              <Text style={styles.modalPointsNumber}>{rewardsPoints} แต้ม</Text>
+            </View>
+
+            <Text style={styles.modalSectionTitle}>สิทธิพิเศษที่สามารถแลกได้</Text>
+
+            <View style={styles.rewardsList}>
+              {[
+                { title: 'ส่วนลดค่าอาหาร ฿10', pts: 100, desc: 'ใช้ได้กับทุกร้านค้าในโรงอาหาร มทส.' },
+                { title: 'ส่วนลดค่าอาหาร ฿20', pts: 200, desc: 'สำหรับออเดอร์ขั้นต่ำ ฿60 ขึ้นไป' },
+                { title: 'ฟรีท็อปปิ้งไข่ดาว 1 ฟอง', pts: 50, desc: 'ใช้แลกไข่ดาวสุก/ไม่สุกได้ทุกร้าน' },
+                { title: 'ฟรีน้ำดื่ม มทส. 1 ขวด', pts: 40, desc: 'รับน้ำดื่มเย็นสดชื่นได้ที่จุดบริการ' },
+              ].map((r, i) => {
+                const canRedeem = rewardsPoints >= r.pts;
+                return (
+                  <View key={i} style={styles.rewardItemRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rewardItemTitle}>{r.title}</Text>
+                      <Text style={styles.rewardItemDesc}>{r.desc}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[
+                        styles.redeemActionBtn,
+                        !canRedeem && styles.redeemActionBtnDisabled,
+                      ]}
+                      onPress={() => {
+                        if (canRedeem) {
+                          Alert.alert('แลกสิทธิพิเศษสำเร็จ', `ใช้ ${r.pts} แต้ม แลก "${r.title}" เรียบร้อยแล้ว`);
+                          setShowRewardsModal(false);
+                        } else {
+                          Alert.alert('คะแนนสะสมไม่เพียงพอ', `คุณต้องมีอย่างน้อย ${r.pts} แต้ม เพื่อแลกรายการนี้`);
+                        }
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.redeemActionBtnText,
+                          !canRedeem && styles.redeemActionBtnTextDisabled,
+                        ]}
+                      >
+                        {r.pts} แต้ม
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalDoneBtn}
+              onPress={() => setShowRewardsModal(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalDoneBtnText}>ตกลง</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Digital Pass / QR Modal */}
       {selectedPassOrder && (
@@ -367,41 +760,84 @@ const styles = StyleSheet.create({
     paddingTop: 18,
     paddingBottom: 14,
     backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
   },
   headerTitle: {
     ...TYPOGRAPHY.black,
     fontSize: 22,
     color: COLORS.textPrimary,
   },
+  headerSubtitle: {
+    ...TYPOGRAPHY.regular,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
   historyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F1F5F9',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  historyBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
   },
   historyBtnText: {
     ...TYPOGRAPHY.bold,
     fontSize: 13,
     color: COLORS.textPrimary,
   },
+  historyBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  filterBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    gap: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  filterChipActive: {
+    backgroundColor: COLORS.primaryLight,
+    borderColor: 'rgba(255, 94, 58, 0.35)',
+  },
+  filterChipText: {
+    ...TYPOGRAPHY.medium,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  filterChipTextActive: {
+    ...TYPOGRAPHY.bold,
+    color: COLORS.primary,
+  },
   content: {
     padding: 16,
   },
-  // Rewards Points Card matching Grab
+  // Rewards Points Card
   rewardsCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: '#FFF8F1',
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 22,
-    shadowColor: '#000',
+    borderColor: '#FED7AA',
+    marginBottom: 20,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
   },
@@ -409,23 +845,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   giftIconCircle: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 94, 58, 0.2)',
+    borderWidth: 1.5,
+    borderColor: '#FDBA74',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  rewardsHeaderBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
   },
   rewardsTitle: {
     ...TYPOGRAPHY.extraBold,
     fontSize: 14,
     color: COLORS.textPrimary,
-    marginBottom: 2,
   },
   rewardsSub: {
     ...TYPOGRAPHY.regular,
@@ -434,6 +879,8 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   findPointsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
     alignSelf: 'flex-start',
     paddingVertical: 4,
   },
@@ -442,13 +889,23 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#0284C7',
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   sectionTitle: {
     ...TYPOGRAPHY.black,
     fontSize: 18,
     color: COLORS.textPrimary,
-    marginBottom: 14,
   },
-  // Empty State (หน้าโล่งๆ เมื่อยังไม่ได้สั่ง)
+  sectionCounterText: {
+    ...TYPOGRAPHY.medium,
+    fontSize: 12,
+    color: COLORS.textMuted,
+  },
+  // Empty State
   emptyContainer: {
     backgroundColor: COLORS.surface,
     borderRadius: 18,
@@ -465,7 +922,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 16,
     borderWidth: 1.5,
     borderColor: 'rgba(255, 94, 58, 0.25)',
   },
@@ -483,7 +940,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
     marginBottom: 20,
-    maxWidth: 280,
+    maxWidth: 290,
   },
   startOrderBtn: {
     backgroundColor: COLORS.primary,
@@ -501,9 +958,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
   },
-  // Active Orders
+  // Active Orders Section
   activeSection: {
-    marginBottom: 20,
+    marginBottom: 22,
   },
   activeOrderCard: {
     backgroundColor: COLORS.surface,
@@ -518,21 +975,22 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  activeHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
   orderTopBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
   activeQueueNum: {
     ...TYPOGRAPHY.black,
-    fontSize: 18,
+    fontSize: 17,
     color: COLORS.primary,
-  },
-  activeOrderId: {
-    ...TYPOGRAPHY.regular,
-    fontSize: 10,
-    color: COLORS.textMuted,
   },
   statusBadge: {
     paddingHorizontal: 10,
@@ -577,15 +1035,14 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   activeShopName: {
-    ...TYPOGRAPHY.extraBold,
-    fontSize: 14,
+    ...TYPOGRAPHY.bold,
+    fontSize: 13,
     color: COLORS.textPrimary,
   },
   activeCanteenName: {
     ...TYPOGRAPHY.regular,
     fontSize: 11,
     color: COLORS.textSecondary,
-    marginBottom: 4,
   },
   activeItemRow: {
     flexDirection: 'row',
@@ -656,85 +1113,313 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
   },
-  // Grab-style Recent List
-  recentList: {
+  // Order Card Container
+  recentCardsContainer: {
+    gap: 12,
+  },
+  orderCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 18,
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
-    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  grabItemRow: {
+  orderCardTopRow: {
     flexDirection: 'row',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
     alignItems: 'flex-start',
   },
-  foodIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF7ED',
+  thumbnailWrapper: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#F1F5F9',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+  },
+  thumbnailImage: {
+    borderRadius: 14,
+  },
+  grabBadgeOverlay: {
+    position: 'absolute',
+    bottom: 3,
+    right: 3,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#10B981',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    marginTop: 2,
-    borderWidth: 1,
-    borderColor: '#FED7AA',
   },
-  walletIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF7ED',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    marginTop: 2,
-    borderWidth: 1,
-    borderColor: '#FED7AA',
-  },
-  itemCenterCol: {
+  orderCardCenterCol: {
     flex: 1,
-    minWidth: 0,
+    marginLeft: 12,
+    justifyContent: 'center',
   },
-  grabShopTitle: {
-    ...TYPOGRAPHY.extraBold,
-    fontSize: 14,
+  stallTitleText: {
+    ...TYPOGRAPHY.bold,
+    fontSize: 15,
     color: COLORS.textPrimary,
     marginBottom: 2,
   },
-  grabDateText: {
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  canteenSubText: {
+    ...TYPOGRAPHY.regular,
+    fontSize: 11,
+    color: COLORS.textSecondary,
+  },
+  orderDateText: {
     ...TYPOGRAPHY.regular,
     fontSize: 11,
     color: COLORS.textMuted,
-    marginBottom: 6,
+  },
+  orderCardRightCol: {
+    alignItems: 'flex-end',
+    marginLeft: 8,
+  },
+  orderPriceText: {
+    ...TYPOGRAPHY.black,
+    fontSize: 16,
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  completedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  completedTagText: {
+    ...TYPOGRAPHY.bold,
+    fontSize: 10,
+    color: COLORS.green,
+  },
+  orderCardDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 10,
+  },
+  itemsSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  itemsSummaryLabel: {
+    ...TYPOGRAPHY.bold,
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginRight: 4,
+  },
+  itemsSummaryText: {
+    ...TYPOGRAPHY.regular,
+    fontSize: 12,
+    color: COLORS.textPrimary,
+    flex: 1,
+  },
+  orderCardBottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  ratingSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   starsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
   },
-  reorderLink: {
-    alignSelf: 'flex-start',
+  ratedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  reorderLinkText: {
+  ratedScoreText: {
     ...TYPOGRAPHY.bold,
-    fontSize: 12,
+    fontSize: 11,
+    color: '#D97706',
+    marginLeft: 4,
+  },
+  unratedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratePromptText: {
+    ...TYPOGRAPHY.medium,
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginRight: 4,
+  },
+  reorderPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 94, 58, 0.25)',
+  },
+  reorderPillText: {
+    ...TYPOGRAPHY.bold,
+    fontSize: 11,
     color: COLORS.primary,
   },
-  priceRightCol: {
-    marginLeft: 10,
+  // Wallet Card
+  walletCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  grabPriceBold: {
-    ...TYPOGRAPHY.black,
-    fontSize: 14,
-    color: COLORS.textPrimary,
+  walletIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.primaryLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 94, 58, 0.2)',
   },
   walletPriceOrange: {
     ...TYPOGRAPHY.bold,
-    fontSize: 14,
+    fontSize: 15,
     color: COLORS.primary,
+  },
+  // Rewards Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  rewardsModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: COLORS.surface,
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    ...TYPOGRAPHY.black,
+    fontSize: 17,
+    color: COLORS.textPrimary,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalPointsBadge: {
+    backgroundColor: '#FFF8F1',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalPointsLabel: {
+    ...TYPOGRAPHY.medium,
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginBottom: 2,
+  },
+  modalPointsNumber: {
+    ...TYPOGRAPHY.black,
+    fontSize: 22,
+    color: COLORS.primary,
+  },
+  modalSectionTitle: {
+    ...TYPOGRAPHY.bold,
+    fontSize: 13,
+    color: COLORS.textPrimary,
+    marginBottom: 10,
+  },
+  rewardsList: {
+    gap: 8,
+    marginBottom: 18,
+  },
+  rewardItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  rewardItemTitle: {
+    ...TYPOGRAPHY.bold,
+    fontSize: 13,
+    color: COLORS.textPrimary,
+  },
+  rewardItemDesc: {
+    ...TYPOGRAPHY.regular,
+    fontSize: 10,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  redeemActionBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  redeemActionBtnDisabled: {
+    backgroundColor: '#E2E8F0',
+  },
+  redeemActionBtnText: {
+    ...TYPOGRAPHY.bold,
+    fontSize: 11,
+    color: '#FFFFFF',
+  },
+  redeemActionBtnTextDisabled: {
+    color: '#94A3B8',
+  },
+  modalDoneBtn: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  modalDoneBtnText: {
+    ...TYPOGRAPHY.bold,
+    fontSize: 13,
+    color: COLORS.textPrimary,
   },
 });

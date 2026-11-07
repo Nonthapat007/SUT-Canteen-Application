@@ -4,7 +4,7 @@ import { COLORS } from '../constants/colors';
 import { FONT_FAMILY, TYPOGRAPHY } from '../constants/typography';
 import Icon from './common/Icon';
 
-export default function StallCard({ stall, onSelect }) {
+export default function StallCard({ stall, onSelect, isFavorite = false, onToggleFavorite }) {
   const isOpen = stall.isOpen !== false; // true by default, false when closed
 
   return (
@@ -47,6 +47,25 @@ export default function StallCard({ stall, onSelect }) {
             <Text style={styles.closedText}>Closed</Text>
           </View>
         )}
+
+        {/* Top-Right: Favorite Heart Button */}
+        <TouchableOpacity
+          style={styles.favBadgeBtn}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            if (onToggleFavorite) onToggleFavorite(stall);
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          activeOpacity={0.8}
+        >
+          <Icon
+            name="heart"
+            size={16}
+            color={isFavorite ? '#EF4444' : '#FFFFFF'}
+            variant={isFavorite ? 'filled' : 'outline'}
+            strokeWidth={2.2}
+          />
+        </TouchableOpacity>
 
         {/* Top-Right: Optional "FASTEST" Badge (only when open) */}
         {isOpen && stall.fastest && (
@@ -233,13 +252,27 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 11,
   },
-  fastestBadge: {
+  favBadgeBtn: {
     position: 'absolute',
     top: 10,
     right: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  fastestBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 48,
     backgroundColor: COLORS.primary,
     paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 8,
     zIndex: 3,
   },

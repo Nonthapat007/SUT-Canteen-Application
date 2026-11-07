@@ -63,7 +63,7 @@ export default function KdsDashboardView({
               onPress={() => setActiveTab('orders')}
             >
               <Text style={[styles.tabText, activeTab === 'orders' && styles.tabTextActive]}>
-                🍳 คิวปรุงสด ({urgentOrders.length + holdingOrders.length})
+                คิวปรุงสด ({urgentOrders.length + holdingOrders.length})
               </Text>
             </TouchableOpacity>
 
@@ -72,7 +72,7 @@ export default function KdsDashboardView({
               onPress={() => setActiveTab('grab_stock')}
             >
               <Text style={[styles.tabText, activeTab === 'grab_stock' && styles.tabTextActive]}>
-                ⚡ จัดการสต็อก Grab & Go
+                จัดการสต็อก Grab & Go
               </Text>
             </TouchableOpacity>
           </View>
@@ -107,7 +107,7 @@ export default function KdsDashboardView({
           <View style={styles.sectionHeader}>
             <View style={styles.urgentDot} />
             <Text style={styles.sectionTitle}>
-              🔥 ถึงเวลาปรุงแล้ว / กำลังปรุง ({urgentOrders.length} ออเดอร์)
+              ถึงเวลาปรุงแล้ว / กำลังปรุง ({urgentOrders.length} ออเดอร์)
             </Text>
           </View>
 
@@ -129,14 +129,14 @@ export default function KdsDashboardView({
                     </View>
                     <View style={styles.timeTag}>
                       <Text style={styles.timeTagText}>
-                        {isCooking ? '🍳 กำลังทำ' : '🚨 ถึงคิวแล้ว!'}
+                        {isCooking ? 'กำลังทำ' : 'ถึงคิวแล้ว!'}
                       </Text>
                     </View>
                   </View>
 
                   {/* Customer Info */}
                   <Text style={styles.customerLine}>
-                    👤 {order.studentName} ({order.studentPhone})
+                    {order.studentName} ({order.studentPhone})
                   </Text>
                   <Text style={styles.customerSub}>
                     จุดเดินมา: {order.departureBuilding} (เดิน {order.walkingMinutes} นาที)
@@ -172,7 +172,7 @@ export default function KdsDashboardView({
                         onPress={() => storeActions.updateOrderStatus(order.id, 'COOKING')}
                         activeOpacity={0.8}
                       >
-                        <Text style={styles.startCookBtnText}>▶ 1-TAP: เริ่มทำอาหาร</Text>
+                        <Text style={styles.startCookBtnText}>เริ่มทำอาหาร</Text>
                       </TouchableOpacity>
                     ) : (
                       <TouchableOpacity
@@ -181,7 +181,7 @@ export default function KdsDashboardView({
                         activeOpacity={0.8}
                       >
                         <Text style={styles.readyBtnText}>
-                          ✓ 1-TAP: ปรุงเสร็จแล้ว (แจ้งเตือน นศ.)
+                          ปรุงเสร็จแล้ว (แจ้งเตือน นศ.)
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -193,7 +193,7 @@ export default function KdsDashboardView({
 
           {/* Section 2: Predictive Cloud Holding Orders (Incoming) */}
           <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-            <Text style={styles.cloudIcon}>☁️</Text>
+            <View style={styles.urgentDot} />
             <Text style={styles.sectionTitle}>
               คิวล่วงหน้าบนคลาวด์ (Smart Holding - กำลังนับถอยหลัง) ({holdingOrders.length})
             </Text>
@@ -210,7 +210,7 @@ export default function KdsDashboardView({
                   <Text style={styles.holdingQueueNum}>คิว #{order.orderNumber}</Text>
                   <View style={styles.holdingCountdownPill}>
                     <Text style={styles.holdingCountdownText}>
-                      ⏱️ ปล่อยเข้าจอใน {order.holdSecondsRemaining} วินาที
+                      ปล่อยเข้าจอใน {order.holdSecondsRemaining} วินาที
                     </Text>
                   </View>
                 </View>
@@ -231,7 +231,7 @@ export default function KdsDashboardView({
                   onPress={() => storeActions.updateOrderStatus(order.id, 'RELEASED_TO_KDS')}
                 >
                   <Text style={styles.forceReleaseText}>
-                    ⚡ ดึงเข้าจอทันที (ไม่ต้องรอระบบนับถอยหลัง)
+                    ดึงเข้าจอทันที (ไม่ต้องรอระบบนับถอยหลัง)
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -242,7 +242,7 @@ export default function KdsDashboardView({
           {readyOrders.length > 0 && (
             <View style={{ marginTop: 24 }}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.readyIcon}>🔔</Text>
+                <View style={styles.urgentDot} />
                 <Text style={styles.sectionTitle}>
                   ปรุงเสร็จแล้ว / รอรับอาหาร ({readyOrders.length})
                 </Text>
@@ -262,7 +262,7 @@ export default function KdsDashboardView({
                       style={styles.completeHandoverBtn}
                       onPress={() => storeActions.updateOrderStatus(order.id, 'COMPLETED')}
                     >
-                      <Text style={styles.completeHandoverText}>✓ มอบอาหารแล้ว</Text>
+                      <Text style={styles.completeHandoverText}>มอบอาหารแล้ว</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -276,7 +276,7 @@ export default function KdsDashboardView({
         /* Grab & Go Inventory Management Tab */
         <ScrollView style={styles.kdsBody} showsVerticalScrollIndicator={false}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>⚡ สต็อกสินค้าพร้อมหยิบทันที (Grab & Go Fast-Lane)</Text>
+            <Text style={styles.sectionTitle}>สต็อกสินค้าพร้อมหยิบทันที (Grab & Go Fast-Lane)</Text>
           </View>
           <Text style={styles.holdingExplanation}>
             กด + หรือ - เพื่ออัปเดตจำนวนกล่องที่วางไว้หน้าร้านแบบ Real-time นักศึกษาจะเห็นจำนวนอัปเดตทันที
@@ -286,11 +286,13 @@ export default function KdsDashboardView({
             {grabAndGoItems.map((item) => (
               <View key={item.id} style={styles.grabStockCard}>
                 <View style={styles.grabLeft}>
-                  <Text style={styles.grabEmoji}>{item.image || '🍱'}</Text>
+                  <View style={styles.grabEmoji}>
+                    <Text style={{ fontSize: 13, color: COLORS.primary, fontWeight: '700' }}>G&G</Text>
+                  </View>
                   <View style={styles.grabDetails}>
                     <Text style={styles.grabItemTitle}>{item.name}</Text>
                     <Text style={styles.grabItemLoc}>
-                      📍 {item.canteenName} • {item.pickupSpot}
+                      {item.canteenName} • {item.pickupSpot}
                     </Text>
                     <Text style={styles.grabItemPrice}>ราคา: ฿{item.price}</Text>
                   </View>

@@ -16,7 +16,7 @@ export default function CampusRadar({
       <View style={styles.headerRow}>
         <View>
           <View style={styles.titleWithBadge}>
-            <Text style={styles.title}>📡 Campus Load Balancing</Text>
+            <Text style={styles.title}>Campus Load Balancing</Text>
             <View style={styles.livePill}>
               <View style={styles.pulseGreen} />
               <Text style={styles.liveText}>ซิงก์คิว Real-time</Text>
@@ -51,7 +51,7 @@ export default function CampusRadar({
               {/* Proximity / Nearest Tag */}
               {canteen.walkingMinutes <= 2 && (
                 <View style={styles.nearestBadge}>
-                  <Text style={styles.nearestText}>🎯 ใกล้สุด</Text>
+                  <Text style={styles.nearestText}>ใกล้สุด</Text>
                 </View>
               )}
 
@@ -72,7 +72,7 @@ export default function CampusRadar({
 
               {/* Walking Time Info */}
               <View style={styles.walkingRow}>
-                <Text style={styles.walkingIcon}>🚶‍♂️</Text>
+                <Icon name="navigation" size={12} color={COLORS.textSecondary} style={{ marginRight: 4 }} />
                 <Text style={styles.walkingText}>
                   เดิน {canteen.walkingMinutes} นาที
                 </Text>

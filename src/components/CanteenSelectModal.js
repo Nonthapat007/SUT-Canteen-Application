@@ -21,6 +21,7 @@ export default function CanteenSelectModal({
   onClose,
   selectedCanteen,
   onSelectCanteen,
+  stalls = [],
 }) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -138,7 +139,7 @@ export default function CanteenSelectModal({
                       )}
                     </View>
 
-                    {/* Canteen Name */}
+                    {/* Canteen Name & Live Status */}
                     <View style={styles.canteenCardInfo}>
                       <Text
                         style={[styles.gridThaiName, isSelected && styles.gridThaiNameSelected]}
@@ -146,6 +147,18 @@ export default function CanteenSelectModal({
                       >
                         {canteen.thaiName}
                       </Text>
+                      {(() => {
+                        const count = (stalls || []).filter((s) => s.canteenId === canteen.id && s.isOpen !== false).length;
+                        return count > 0 ? (
+                          <View style={styles.openBadge}>
+                            <Text style={styles.openBadgeText}>{count} ร้านเปิดอยู่</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.closedBadge}>
+                            <Text style={styles.closedBadgeText}>ยังไม่มีร้าน</Text>
+                          </View>
+                        );
+                      })()}
                     </View>
                   </TouchableOpacity>
                 );
@@ -364,5 +377,31 @@ const styles = StyleSheet.create({
   },
   gridThaiNameSelected: {
     color: COLORS.primary,
+  },
+  openBadge: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    alignSelf: 'flex-start',
+    marginTop: 5,
+  },
+  openBadgeText: {
+    color: '#15803D',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  closedBadge: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    alignSelf: 'flex-start',
+    marginTop: 5,
+  },
+  closedBadgeText: {
+    color: '#64748B',
+    fontSize: 10,
+    fontWeight: '500',
   },
 });

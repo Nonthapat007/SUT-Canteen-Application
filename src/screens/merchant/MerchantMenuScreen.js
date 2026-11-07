@@ -260,7 +260,8 @@ export default function MerchantMenuScreen({
                           )}
                           {item.isGrabAndGo && (
                             <View style={styles.grabAndGoBadge}>
-                              <Text style={styles.grabAndGoBadgeText}>⚡ Grab & Go</Text>
+                              <Icon name="zap" size={10} color="#059669" />
+                              <Text style={styles.grabAndGoBadgeText}>Grab & Go</Text>
                             </View>
                           )}
                           {!item.imageUrl && (
@@ -639,6 +640,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   grabAndGoBadgeText: {
     color: '#059669',

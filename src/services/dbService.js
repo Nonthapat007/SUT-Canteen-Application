@@ -88,7 +88,7 @@ export function getDefaultMenuOptions(name = '') {
     { id: 'r3', name: 'พิเศษ (+10฿)', price: 10 },
     { id: 'r4', name: 'เผ็ดน้อย', price: 0 },
     { id: 'r5', name: 'เผ็ดปกติ', price: 0 },
-    { id: 'r6', name: 'เผ็ดจัดจ้าน 🔥', price: 0 },
+    { id: 'r6', name: 'เผ็ดมาก (จัดจ้าน)', price: 0 },
     { id: 'r7', name: 'ไม่ใส่ผัก', price: 0 },
   ];
 }

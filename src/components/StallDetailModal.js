@@ -18,6 +18,10 @@ import dbService from '../services/dbService';
 export default function StallDetailModal({
   visible,
   stall,
+  isFavoriteStall = false,
+  onToggleFavoriteStall,
+  isFavoriteDish,
+  onToggleFavoriteDish,
   onClose,
   onSelectMenu,
 }) {
@@ -86,15 +90,34 @@ export default function StallDetailModal({
               </Svg>
             </View>
 
-            {/* Close Button */}
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={onClose}
-              activeOpacity={0.8}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Icon name="close" size={20} color={COLORS.textWhite} strokeWidth={2.5} />
-            </TouchableOpacity>
+            {/* Top Action Buttons (Heart + Close) */}
+            <View style={styles.topActionsRow}>
+              {onToggleFavoriteStall && (
+                <TouchableOpacity
+                  style={styles.headerActionBtn}
+                  onPress={onToggleFavoriteStall}
+                  activeOpacity={0.8}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Icon
+                    name="heart"
+                    size={18}
+                    color={isFavoriteStall ? '#EF4444' : COLORS.textWhite}
+                    variant={isFavoriteStall ? 'filled' : 'outline'}
+                    strokeWidth={2.2}
+                  />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.headerActionBtn}
+                onPress={onClose}
+                activeOpacity={0.8}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon name="close" size={20} color={COLORS.textWhite} strokeWidth={2.5} />
+              </TouchableOpacity>
+            </View>
 
             {/* Header Shop Info inside Translucent Contrast Card */}
             <View style={styles.coverInfo}>
@@ -207,6 +230,25 @@ export default function StallDetailModal({
 
                       {/* Right Action Button */}
                       <View style={styles.actionCol}>
+                        {onToggleFavoriteDish && (
+                          <TouchableOpacity
+                            style={styles.favDishBtn}
+                            onPress={(e) => {
+                              e.stopPropagation?.();
+                              onToggleFavoriteDish(item);
+                            }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            activeOpacity={0.7}
+                          >
+                            <Icon
+                              name="heart"
+                              size={15}
+                              color={isFavoriteDish && isFavoriteDish(item) ? '#EF4444' : '#CBD5E1'}
+                              variant={isFavoriteDish && isFavoriteDish(item) ? 'filled' : 'outline'}
+                            />
+                          </TouchableOpacity>
+                        )}
+
                         {canOrder ? (
                           <View style={styles.orderBtn}>
                             <Icon name="plus" size={13} color={COLORS.textWhite} strokeWidth={2.5} />
@@ -263,6 +305,32 @@ const styles = StyleSheet.create({
   gradientOverlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1,
+  },
+  topActionsRow: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    flexDirection: 'row',
+    gap: 8,
+    zIndex: 10,
+  },
+  headerActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  favDishBtn: {
+    padding: 4,
   },
   closeBtn: {
     position: 'absolute',

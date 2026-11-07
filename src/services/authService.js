@@ -424,6 +424,46 @@ export const authService = {
   },
 
   /**
+   * Updates password for registered user in local storage and Supabase
+   */
+  async updatePassword(oldPassword, newPassword, user) {
+    try {
+      if (!user) return { error: 'ไม่พบข้อมูลผู้ใช้' };
+      if (!newPassword || newPassword.length < 6) {
+        return { error: 'รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 6 ตัวอักษร' };
+      }
+
+      const registeredUsers = await this.getRegisteredUsers();
+      const userIndex = registeredUsers.findIndex(
+        (u) =>
+          (user.id && u.id === user.id) ||
+          (user.email && u.email && u.email.toLowerCase() === user.email.toLowerCase()) ||
+          (user.studentId && u.studentId && u.studentId === user.studentId)
+      );
+
+      if (userIndex >= 0) {
+        if (registeredUsers[userIndex].password && registeredUsers[userIndex].password !== oldPassword) {
+          return { error: 'รหัสผ่านเดิมไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง' };
+        }
+        registeredUsers[userIndex].password = newPassword;
+        await AsyncStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(registeredUsers));
+      }
+
+      // Sync with Supabase Auth if applicable
+      try {
+        await supabase.auth.updateUser({ password: newPassword });
+      } catch (err) {
+        // Fallback or ignore if offline
+      }
+
+      return { success: true };
+    } catch (e) {
+      console.error('Error updating password:', e);
+      return { error: 'ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่อีกครั้ง' };
+    }
+  },
+
+  /**
    * Fetches the latest user profile data from Supabase and local storage,
    * ensuring cross-device profile and avatar sync.
    */

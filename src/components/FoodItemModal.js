@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../constants/colors';
 import { TYPOGRAPHY } from '../constants/typography';
 import Icon from './common/Icon';
@@ -10,6 +11,8 @@ export default function FoodItemModal({
   onClose,
   stall,
   menuItem,
+  isFavoriteDish = false,
+  onToggleFavoriteDish,
   onProceedToSync,
 }) {
   if (!visible || !menuItem || !stall) return null;
@@ -25,16 +28,32 @@ export default function FoodItemModal({
 
   const cleanDescription = parsed.cleanDescription || menuItem.desc || menuItem.description;
 
+  const modalScrollRef = useRef(null);
   const [selectedOptions, setSelectedOptions] = useState([]);
   const [specialNote, setSpecialNote] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [userSavedPrefs, setUserSavedPrefs] = useState([]);
 
-  // Reset states whenever modal opens for a menu item
+  // Reset states & load saved preferences whenever modal opens
   useEffect(() => {
     if (visible) {
       setSelectedOptions([]);
       setSpecialNote('');
       setQuantity(1);
+
+      AsyncStorage.getItem('@sut_saved_preferences')
+        .then((res) => {
+          if (res) {
+            try {
+              const parsed = JSON.parse(res);
+              if (Array.isArray(parsed)) {
+                const active = parsed.filter((p) => p.enabled);
+                setUserSavedPrefs(active);
+              }
+            } catch (e) {}
+          }
+        })
+        .catch(() => {});
     }
   }, [visible, menuItem?.id]);
 
@@ -81,13 +100,37 @@ export default function FoodItemModal({
             <Text style={styles.grabHeaderTitle} numberOfLines={1}>
               {menuItem.name}
             </Text>
-            <View style={styles.headerPlaceholder} />
+            {onToggleFavoriteDish ? (
+              <TouchableOpacity
+                onPress={onToggleFavoriteDish}
+                style={styles.headerFavBtn}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Icon
+                  name="heart"
+                  size={18}
+                  color={isFavoriteDish ? '#EF4444' : '#64748B'}
+                  variant={isFavoriteDish ? 'filled' : 'outline'}
+                />
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.headerPlaceholder} />
+            )}
           </View>
 
-          <ScrollView style={styles.optionsScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            ref={modalScrollRef}
+            style={styles.optionsScroll}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
             {/* Stall & Menu Info */}
             <View style={styles.menuMetaBox}>
-              <Text style={styles.stallName}>🏪 {stall.thaiName || stall.name}</Text>
+              <View style={styles.stallRow}>
+                <Icon name="store" size={12} color="#64748B" style={{ marginRight: 4 }} />
+                <Text style={styles.stallName}>{stall.thaiName || stall.name}</Text>
+              </View>
               {!!cleanDescription && (
                 <Text style={styles.menuDesc} numberOfLines={2}>
                   {cleanDescription}
@@ -118,7 +161,7 @@ export default function FoodItemModal({
                       >
                         <View style={styles.optionLeft}>
                           <View style={[styles.grabCheckbox, isSelected && styles.grabCheckboxActive]}>
-                            {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                            {isSelected && <Icon name="check" size={12} color="#FFFFFF" strokeWidth={3} />}
                           </View>
                           <Text style={[styles.optionName, isSelected && styles.optionNameActive]}>
                             {opt.name}
@@ -151,6 +194,48 @@ export default function FoodItemModal({
                   <Text style={styles.optionalBadgeText}>ไม่จำเป็นต้องระบุ</Text>
                 </View>
               </View>
+
+              {/* 1-Tap Quick Chips from Saved Customizations */}
+              {userSavedPrefs.length > 0 && (
+                <View style={styles.savedPrefChipsWrapper}>
+                  <Text style={styles.savedPrefChipsTitle}>ตัวเลือกพิเศษที่บันทึกไว้ (แตะเพื่อเพิ่ม):</Text>
+                  <View style={styles.savedPrefChipsRow}>
+                    {userSavedPrefs.map((pref) => {
+                      const cleanLabel = pref.label.split(' (')[0];
+                      const isIncluded = specialNote.includes(cleanLabel);
+                      return (
+                        <TouchableOpacity
+                          key={pref.id}
+                          style={[styles.prefChipPill, isIncluded && styles.prefChipPillActive]}
+                          onPress={() => {
+                            if (isIncluded) {
+                              const newNote = specialNote
+                                .replace(cleanLabel, '')
+                                .replace(/,\s*,/g, ',')
+                                .replace(/^,\s*/, '')
+                                .replace(/,\s*$/, '')
+                                .trim();
+                              setSpecialNote(newNote);
+                            } else {
+                              const prefix = specialNote.trim() ? `${specialNote.trim()}, ` : '';
+                              setSpecialNote(`${prefix}${cleanLabel}`);
+                            }
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          {isIncluded && (
+                            <Icon name="check" size={11} color="#C2410C" strokeWidth={3} style={{ marginRight: 4 }} />
+                          )}
+                          <Text style={[styles.prefChipPillText, isIncluded && styles.prefChipPillTextActive]}>
+                            {isIncluded ? cleanLabel : `+ ${cleanLabel}`}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
               <TextInput
                 style={styles.grabNoteInput}
                 placeholder="ระบุรายละเอียดคำขอ (ขึ้นอยู่กับดุลยพินิจของร้าน)"
@@ -161,6 +246,11 @@ export default function FoodItemModal({
                 numberOfLines={2}
                 textAlignVertical="top"
                 maxLength={120}
+                onFocus={() => {
+                  setTimeout(() => {
+                    modalScrollRef.current?.scrollToEnd({ animated: true });
+                  }, 150);
+                }}
               />
             </View>
 
@@ -254,6 +344,19 @@ const styles = StyleSheet.create({
   },
   headerPlaceholder: {
     width: 32,
+  },
+  headerFavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stallRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
   },
   optionsScroll: {
     paddingHorizontal: 16,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   ScrollView,
   Image,
   Alert,
+  KeyboardAvoidingView,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import { TYPOGRAPHY } from '../../constants/typography';
@@ -19,6 +22,59 @@ export default function SignInScreen({
   onNavigateToSignUp,
   initialEmail = '',
 }) {
+  // Input References for smooth keyboard navigation on mobile
+  const scrollViewRef = useRef(null);
+  const identifierInputRef = useRef(null);
+  const passwordInputRef = useRef(null);
+  const inputLayouts = useRef({});
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  const handleFieldLayout = (field) => (e) => {
+    inputLayouts.current[field] = e.nativeEvent.layout.y;
+  };
+
+  const scrollToField = (field) => {
+    const doScroll = () => {
+      if (field === 'password') {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+        return;
+      }
+      const formY = inputLayouts.current['form'] || 0;
+      const fieldY = inputLayouts.current[field] || 0;
+      const targetY = formY + fieldY - 30;
+      if (targetY > 0) {
+        scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+      }
+    };
+    doScroll();
+    setTimeout(doScroll, 80);
+    setTimeout(doScroll, 220);
+  };
+
+  useEffect(() => {
+    const onShow = (e) => {
+      const height = e?.endCoordinates?.height || 300;
+      setKeyboardOffset(height);
+    };
+    const onHide = () => {
+      setKeyboardOffset(0);
+    };
+
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      onShow
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      onHide
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   // Account Role Type: 'customer' | 'merchant'
   const [selectedRole, setSelectedRole] = useState('customer');
   const [identifier, setIdentifier] = useState(initialEmail || '');
@@ -81,8 +137,26 @@ export default function SignInScreen({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* SUT Canteen Express Logo */}
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoidingView}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.container}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingBottom: keyboardOffset > 0 ? keyboardOffset + 220 : (Platform.OS === 'ios' ? 140 : 160),
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets={true}
+      >
+        {/* SUT Canteen Express Logo */}
       <View style={styles.logoContainer}>
         <View style={styles.bowlIconWrapper}>
           <Icon name="burger" size={24} color={COLORS.primary} strokeWidth={2} />
@@ -149,7 +223,12 @@ export default function SignInScreen({
       </View>
 
       {/* Form Fields */}
-      <View style={styles.form}>
+      <View
+        style={styles.form}
+        onLayout={(e) => {
+          inputLayouts.current['form'] = e.nativeEvent.layout.y;
+        }}
+      >
         {/* Auth Error Banner (เมื่อกรอกรหัสหรือเมลผิด) */}
         {authError ? (
           <View style={styles.errorBanner}>
@@ -159,59 +238,75 @@ export default function SignInScreen({
         ) : null}
 
         {/* Email / SUT ID / Phone / Shop Code */}
-        <View style={styles.inputLabelRow}>
-          <Text style={styles.inputLabel}>
-            {selectedRole === 'merchant'
-              ? 'อีเมลร้านค้า หรือ รหัสร้านค้า (Shop Code)'
-              : 'อีเมล มทส. หรือ รหัสนักศึกษา / เบอร์โทร'}
-          </Text>
+        <View style={styles.inputGroup} onLayout={handleFieldLayout('identifier')}>
+          <View style={styles.inputLabelRow}>
+            <Text style={styles.inputLabel}>
+              {selectedRole === 'merchant'
+                ? 'อีเมลร้านค้า หรือ รหัสร้านค้า (Shop Code)'
+                : 'อีเมล มทส. หรือ รหัสนักศึกษา / เบอร์โทร'}
+            </Text>
+          </View>
+          <View style={[styles.inputWrapper, identifierError ? styles.inputWrapperError : null]}>
+            <TextInput
+              ref={identifierInputRef}
+              style={styles.textInput}
+              placeholder={
+                selectedRole === 'merchant'
+                  ? 'merchant@sut.ac.th หรือ SUT-SHOP-01'
+                  : 'sarawut@g.sut.ac.th หรือ B6XXXXXX'
+              }
+              placeholderTextColor={COLORS.textMuted}
+              value={identifier}
+              onChangeText={(text) => {
+                setIdentifier(text);
+                if (identifierError) setIdentifierError('');
+                if (authError) setAuthError('');
+              }}
+              autoCapitalize="none"
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => {
+                passwordInputRef.current?.focus();
+                scrollToField('password');
+              }}
+              onFocus={() => scrollToField('identifier')}
+            />
+          </View>
+          {identifierError ? (
+            <Text style={styles.fieldErrorText}>* {identifierError}</Text>
+          ) : null}
         </View>
-        <View style={[styles.inputWrapper, identifierError ? styles.inputWrapperError : null]}>
-          <TextInput
-            style={styles.textInput}
-            placeholder={
-              selectedRole === 'merchant'
-                ? 'merchant@sut.ac.th หรือ SUT-SHOP-01'
-                : 'sarawut@g.sut.ac.th หรือ B6XXXXXX'
-            }
-            placeholderTextColor={COLORS.textMuted}
-            value={identifier}
-            onChangeText={(text) => {
-              setIdentifier(text);
-              if (identifierError) setIdentifierError('');
-              if (authError) setAuthError('');
-            }}
-            autoCapitalize="none"
-          />
-        </View>
-        {identifierError ? (
-          <Text style={styles.fieldErrorText}>* {identifierError}</Text>
-        ) : null}
 
         {/* Password */}
-        <View style={styles.inputLabelRow}>
-          <Text style={styles.inputLabel}>รหัสผ่าน (Password)</Text>
+        <View style={styles.inputGroup} onLayout={handleFieldLayout('password')}>
+          <View style={styles.inputLabelRow}>
+            <Text style={styles.inputLabel}>รหัสผ่าน (Password)</Text>
+          </View>
+          <View style={[styles.inputWrapper, passwordError ? styles.inputWrapperError : null]}>
+            <TextInput
+              ref={passwordInputRef}
+              style={styles.textInput}
+              placeholder="รหัสผ่าน"
+              placeholderTextColor={COLORS.textMuted}
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (passwordError) setPasswordError('');
+                if (authError) setAuthError('');
+              }}
+              returnKeyType="go"
+              onSubmitEditing={handleSignIn}
+              onFocus={() => scrollToField('password')}
+            />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+              <Icon name={showPassword ? 'eye' : 'eye-off'} size={18} color="#64748B" strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+          {passwordError ? (
+            <Text style={styles.fieldErrorText}>* {passwordError}</Text>
+          ) : null}
         </View>
-        <View style={[styles.inputWrapper, passwordError ? styles.inputWrapperError : null]}>
-          <TextInput
-            style={styles.textInput}
-            placeholder="รหัสผ่าน"
-            placeholderTextColor={COLORS.textMuted}
-            secureTextEntry={!showPassword}
-            value={password}
-            onChangeText={(text) => {
-              setPassword(text);
-              if (passwordError) setPasswordError('');
-              if (authError) setAuthError('');
-            }}
-          />
-          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-            <Icon name={showPassword ? 'eye' : 'eye-off'} size={18} color="#64748B" strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
-        {passwordError ? (
-          <Text style={styles.fieldErrorText}>* {passwordError}</Text>
-        ) : null}
 
         {/* Options Row: Remember Me & Forgot Password */}
         <View style={styles.optionsRow}>
@@ -307,10 +402,15 @@ export default function SignInScreen({
         </View>
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.surface,
@@ -318,11 +418,12 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 36,
-    paddingBottom: 40,
+    paddingBottom: Platform.OS === 'ios' ? 140 : 160,
     alignItems: 'center',
     maxWidth: 420,
     width: '100%',
     alignSelf: 'center',
+    flexGrow: 1,
   },
   logoContainer: {
     flexDirection: 'row',

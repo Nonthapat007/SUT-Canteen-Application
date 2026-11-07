@@ -40,7 +40,7 @@ export default function ClassSyncModal({
   });
 
   const timeOptions = [
-    { label: '🚶 เดินไปตอนนี้ (ส่งครัวทันที)', value: 0 },
+    { label: 'เดินไปตอนนี้ (ส่งครัวทันที)', value: 0 },
     { label: 'อีก 5 นาที', value: 5 },
     { label: 'อีก 10 นาที', value: 10 },
     { label: 'อีก 15 นาที', value: 15 },
@@ -77,7 +77,10 @@ export default function ClassSyncModal({
             {/* Selected Dish Summary Card */}
             <View style={styles.dishSummary}>
               <View style={styles.dishLeft}>
-                <Text style={styles.stallName}>🏪 {selectedStall.thaiName || selectedStall.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                  <Icon name="store" size={13} color={COLORS.primary} style={{ marginRight: 5 }} />
+                  <Text style={styles.stallName}>{selectedStall.thaiName || selectedStall.name}</Text>
+                </View>
                 <Text style={styles.dishName}>{selectedMenu.name}</Text>
                 {customOptions.length > 0 && (
                   <Text style={styles.optionsNote} numberOfLines={2}>
@@ -86,7 +89,7 @@ export default function ClassSyncModal({
                 )}
                 {!!specialNotes && (
                   <Text style={styles.specialNotesDisplay} numberOfLines={2}>
-                    📝 โน้ต: {specialNotes}
+                    โน้ต: {specialNotes}
                   </Text>
                 )}
               </View>
@@ -121,11 +124,14 @@ export default function ClassSyncModal({
             <View style={styles.sectionBox}>
               <View style={styles.departureHeaderRow}>
                 <Text style={styles.sectionLabel}>
-                  ⏰ คุณจะออกจากอาคารเรียนเมื่อใด?
+                  คุณจะออกจากอาคารเรียนเมื่อใด?
                 </Text>
-                <Text style={styles.currentBldNote}>
-                  📍 {currentBuilding?.name || 'กลุ่มอาคารเรียน มทส.'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Icon name="location" size={11} color={COLORS.textMuted} style={{ marginRight: 3 }} />
+                  <Text style={styles.currentBldNote}>
+                    {currentBuilding?.name || 'กลุ่มอาคารเรียน มทส.'}
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.pillsContainer}>
@@ -151,7 +157,7 @@ export default function ClassSyncModal({
             <View style={styles.timingCard}>
               <View style={styles.timingTopRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.timingLabel}>⏱️ คาดว่าอาหารเสร็จพร้อมรับ</Text>
+                  <Text style={styles.timingLabel}>คาดว่าอาหารเสร็จพร้อมรับ</Text>
                   <Text style={styles.timingTime}>{slotting.formattedArrival}</Text>
                 </View>
                 <View style={styles.zeroWaitTag}>
@@ -169,8 +175,8 @@ export default function ClassSyncModal({
                 />
                 <Text style={styles.statusText}>
                   {slotting.shouldReleaseImmediately
-                    ? '🚀 ส่งเข้าจอครัวแม่ค้า (KDS) ทันที แม่ค้าเริ่มปรุงตอนนี้'
-                    : `☁️ หน่วงเวลาบนคลาวด์อีก ${Math.ceil(slotting.holdSecondsRemaining / 60)} นาที (ส่งเข้าเตาพอดีเวลา)`}
+                    ? 'ส่งเข้าจอครัวแม่ค้า (KDS) ทันที แม่ค้าเริ่มปรุงตอนนี้'
+                    : `หน่วงเวลาบนคลาวด์อีก ${Math.ceil(slotting.holdSecondsRemaining / 60)} นาที (ส่งเข้าเตาพอดีเวลา)`}
                 </Text>
               </View>
 
@@ -183,7 +189,7 @@ export default function ClassSyncModal({
                 <Text style={styles.algorithmToggleText}>
                   {showAlgorithmDetails
                     ? '▲ ซ่อนเบื้องหลังการคำนวณ'
-                    : 'ℹ️ ดูเบื้องหลังการคำนวณเวลา (Predictive Algorithm) ▼'}
+                    : 'ดูเบื้องหลังการคำนวณเวลา (Predictive Algorithm) ▼'}
                 </Text>
               </TouchableOpacity>
 
@@ -194,15 +200,15 @@ export default function ClassSyncModal({
                   </Text>
                   <View style={styles.gridParams}>
                     <View style={styles.paramItem}>
-                      <Text style={styles.paramLabel}>🚶‍♂️ เดินเท้า</Text>
+                      <Text style={styles.paramLabel}>เดินเท้า</Text>
                       <Text style={styles.paramVal}>{slotting.walkingMinutes} นาที</Text>
                     </View>
                     <View style={styles.paramItem}>
-                      <Text style={styles.paramLabel}>🍳 เวลาปรุง</Text>
+                      <Text style={styles.paramLabel}>เวลาปรุง</Text>
                       <Text style={styles.paramVal}>{slotting.standardPrepMinutes} นาที</Text>
                     </View>
                     <View style={styles.paramItem}>
-                      <Text style={styles.paramLabel}>⏳ คิวสะสม</Text>
+                      <Text style={styles.paramLabel}>คิวสะสม</Text>
                       <Text style={styles.paramVal}>{slotting.currentQueueWaitMinutes} นาที</Text>
                     </View>
                   </View>

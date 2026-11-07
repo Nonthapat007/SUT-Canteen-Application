@@ -1,4 +1,4 @@
-// Merchant Queue Screen matching Reference Image 1 (คิวออเดอร์, ร้านเปิด, กำลังทำ / ใกล้เสร็จ)
+// Merchant Queue Screen matching SUT Canteen Design System (Mobile-First Vertical UX)
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -27,6 +27,9 @@ export default function MerchantQueueScreen({
     currentStall ? currentStall.isOpen !== false : true
   );
 
+  // Mobile-First Segmented Stage Filter: 'cooking' | 'almost_ready' | 'ready' | 'all'
+  const [activeStageTab, setActiveStageTab] = useState('cooking');
+
   useEffect(() => {
     if (currentStall && typeof currentStall.isOpen !== 'undefined') {
       setIsShopOpen(currentStall.isOpen !== false);
@@ -54,10 +57,14 @@ export default function MerchantQueueScreen({
     ? orders.filter((o) => !o.stallId || o.stallId === currentStall.id)
     : orders;
 
-  // Group orders into columns
-  const cookingOrders = filteredOrders.filter((o) => o.status === 'RELEASED_TO_KDS' || o.status === 'COOKING');
+  // Group orders into stages
+  const cookingOrders = filteredOrders.filter(
+    (o) => o.status === 'RELEASED_TO_KDS' || o.status === 'COOKING'
+  );
   const almostReadyOrders = filteredOrders.filter((o) => o.status === 'ALMOST_READY');
-  const readyOrders = filteredOrders.filter((o) => o.status === 'READY' || o.status === 'READY_FOR_PICKUP');
+  const readyOrders = filteredOrders.filter(
+    (o) => o.status === 'READY' || o.status === 'READY_FOR_PICKUP'
+  );
 
   const totalActiveOrders = cookingOrders.length + almostReadyOrders.length + readyOrders.length;
 
@@ -78,20 +85,146 @@ export default function MerchantQueueScreen({
       walkingMinutes: 2,
       prepMinutes: 5,
       queueMinutes: 2,
-      holdSecondsRemaining: 0, // Immediately releases into KDS
+      holdSecondsRemaining: 0,
     });
+  };
+
+  // Render individual full-width order card
+  const renderOrderCard = (order, stage) => {
+    const isCooking = stage === 'cooking';
+    const isAlmostReady = stage === 'almost_ready';
+    const isReady = stage === 'ready';
+
+    return (
+      <View
+        key={order.id}
+        style={[
+          styles.orderCard,
+          isAlmostReady && styles.orderCardAmber,
+          isReady && styles.orderCardGreen,
+        ]}
+      >
+        {/* Top Header: Order Number + Order Stage Tag */}
+        <View style={styles.cardTopRow}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text
+              style={[
+                styles.orderNumber,
+                isAlmostReady && { color: '#D97706' },
+                isReady && { color: '#16A34A' },
+              ]}
+            >
+              #{order.orderNumber}
+            </Text>
+            {order.type === 'GRAB_AND_GO' && (
+              <View style={styles.grabTypePill}>
+                <Text style={styles.grabTypeText}>Grab & Go</Text>
+              </View>
+            )}
+          </View>
+
+          {isCooking && (
+            <View style={styles.timeTagCooking}>
+              <Text style={styles.timeTagCookingText}>
+                {order.status === 'COOKING' ? 'กำลังปรุง' : 'ออเดอร์ใหม่'}
+              </Text>
+            </View>
+          )}
+
+          {isAlmostReady && (
+            <View style={styles.pulsingBadge}>
+              <Text style={styles.pulsingText}>ลูกค้ากำลังเดินมา</Text>
+            </View>
+          )}
+
+          {isReady && (
+            <View style={styles.pinTag}>
+              <Text style={styles.pinTagText}>PIN: {order.pickupQrPin || '1234'}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Customer Information */}
+        <View style={styles.customerRow}>
+          <Icon name="user" size={13} color={COLORS.textSecondary} strokeWidth={2} style={{ marginRight: 5 }} />
+          <Text style={styles.customerText}>
+            {order.studentName || 'ลูกค้าทั่วไป'} {order.studentPhone ? `(${order.studentPhone})` : ''}
+          </Text>
+        </View>
+
+        {/* Order Items List */}
+        <View style={styles.orderItemsBox}>
+          {(order.items || []).map((it, idx) => (
+            <View key={idx} style={styles.itemLine}>
+              <Text style={styles.itemQty}>{it.qty || 1}x</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemName}>{it.name}</Text>
+                {it.options && it.options.length > 0 && (
+                  <Text style={styles.itemOptions}>{it.options.join(', ')}</Text>
+                )}
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Special Customer Notes (if any) */}
+        {!!order.specialNotes && (
+          <View style={styles.specialNotesBox}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+              <Icon name="file-text" size={11} color="#C2410C" style={{ marginRight: 4 }} />
+              <Text style={styles.specialNotesLabel}>โน้ตจากลูกค้า:</Text>
+            </View>
+            <Text style={styles.specialNotesText}>{order.specialNotes}</Text>
+          </View>
+        )}
+
+        {/* Big 1-Tap Action Button */}
+        {isCooking && (
+          <TouchableOpacity
+            style={styles.actionBtnAlmost}
+            onPress={() => storeActions.updateOrderStatus(order.id, 'ALMOST_READY')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.actionBtnAlmostText}>ใกล้เสร็จแล้ว (แจ้งเตือน นศ.)</Text>
+            <Icon name="chevron-right" size={16} color="#FFFFFF" strokeWidth={2.5} style={{ marginLeft: 6 }} />
+          </TouchableOpacity>
+        )}
+
+        {isAlmostReady && (
+          <TouchableOpacity
+            style={styles.actionBtnReady}
+            onPress={() => storeActions.updateOrderStatus(order.id, 'READY')}
+            activeOpacity={0.85}
+          >
+            <Icon name="check" size={16} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 6 }} />
+            <Text style={styles.actionBtnReadyText}>ปรุงเสร็จแล้ว (พร้อมรับอาหาร)</Text>
+          </TouchableOpacity>
+        )}
+
+        {isReady && (
+          <TouchableOpacity
+            style={styles.actionBtnHandover}
+            onPress={() => storeActions.updateOrderStatus(order.id, 'COMPLETED')}
+            activeOpacity={0.85}
+          >
+            <Icon name="check" size={16} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 6 }} />
+            <Text style={styles.actionBtnHandoverText}>ส่งมอบอาหารแล้ว</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
   };
 
   return (
     <View style={styles.container}>
-      {/* Top Header matching Image 1 */}
+      {/* Top Header Bar */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>คิวออเดอร์</Text>
-          <Text style={styles.headerSub}>{shopName}</Text>
+          <Text style={styles.headerSub} numberOfLines={1}>{shopName}</Text>
         </View>
 
-        {/* Shop Open Toggle */}
+        {/* Shop Open / Closed Toggle */}
         <View style={styles.toggleGroup}>
           <Text style={[styles.shopStatusText, isShopOpen ? styles.textGreen : styles.textMuted]}>
             {isShopOpen ? 'ร้านเปิด' : 'ร้านปิด'}
@@ -134,206 +267,154 @@ export default function MerchantQueueScreen({
         </View>
       ) : (
         <>
-          {/* Main Queue Columns ScrollView */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.columnsContainer}
-          >
-            {/* Column 1: ● กำลังทำ (Cooking) */}
-            <View style={styles.column}>
-              <View style={styles.columnHeader}>
-                <View style={[styles.statusDot, { backgroundColor: '#C2410C' }]} />
-                <Text style={styles.columnTitle}>กำลังทำ {cookingOrders.length}</Text>
-              </View>
-
-              {cookingOrders.length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyText}>ไม่มีออเดอร์</Text>
-                </View>
-              ) : (
-                <ScrollView style={styles.cardList} showsVerticalScrollIndicator={false}>
-                  {cookingOrders.map((order) => (
-                    <View key={order.id} style={styles.orderCard}>
-                      <View style={styles.cardTopRow}>
-                        <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
-                        <Text style={styles.timeTag}>
-                          {order.status === 'COOKING' ? 'กำลังปรุง' : 'ออเดอร์ใหม่'}
-                        </Text>
-                      </View>
-
-                      <View style={styles.customerRow}>
-                        <Icon name="user" size={13} color={COLORS.textSecondary} strokeWidth={2} />
-                        <Text style={styles.customerText}>
-                          {order.studentName} ({order.studentPhone})
-                        </Text>
-                      </View>
-
-                      <View style={styles.orderItemsBox}>
-                        {order.items.map((it, idx) => (
-                          <View key={idx} style={styles.itemLine}>
-                            <Text style={styles.itemQty}>{it.qty}x</Text>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.itemName}>{it.name}</Text>
-                              {it.options && it.options.length > 0 && (
-                                <Text style={styles.itemOptions}>
-                                  {it.options.join(', ')}
-                                </Text>
-                              )}
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-
-                      {!!order.specialNotes && (
-                        <View style={styles.specialNotesBox}>
-                          <Text style={styles.specialNotesLabel}>📝 โน้ตจากลูกค้า:</Text>
-                          <Text style={styles.specialNotesText}>{order.specialNotes}</Text>
-                        </View>
-                      )}
-
-                      <TouchableOpacity
-                        style={styles.actionBtnAlmost}
-                        onPress={() => storeActions.updateOrderStatus(order.id, 'ALMOST_READY')}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.actionBtnAlmostText}>ใกล้เสร็จแล้ว (แจ้งเตือน)</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-              )}
-            </View>
-
-            {/* Column 2: ● ใกล้เสร็จ (Almost Ready) */}
-            <View style={styles.column}>
-              <View style={styles.columnHeader}>
-                <View style={[styles.statusDot, { backgroundColor: '#EA580C' }]} />
-                <Text style={styles.columnTitle}>ใกล้เสร็จ {almostReadyOrders.length}</Text>
-              </View>
-
-              {almostReadyOrders.length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyText}>ไม่มีออเดอร์</Text>
-                </View>
-              ) : (
-                <ScrollView style={styles.cardList} showsVerticalScrollIndicator={false}>
-                  {almostReadyOrders.map((order) => (
-                    <View key={order.id} style={styles.orderCard}>
-                      <View style={styles.cardTopRow}>
-                        <Text style={styles.orderNumber}>#{order.orderNumber}</Text>
-                        <View style={styles.pulsingBadge}>
-                          <Text style={styles.pulsingText}>ลูกค้ากำลังเดินมา</Text>
-                        </View>
-                      </View>
-
-                      <View style={styles.customerRow}>
-                        <Icon name="user" size={13} color={COLORS.textSecondary} strokeWidth={2} />
-                        <Text style={styles.customerText}>
-                          {order.studentName} ({order.studentPhone})
-                        </Text>
-                      </View>
-
-                      <View style={styles.orderItemsBox}>
-                        {order.items.map((it, idx) => (
-                          <View key={idx} style={styles.itemLine}>
-                            <Text style={styles.itemQty}>{it.qty}x</Text>
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.itemName}>{it.name}</Text>
-                              {it.options && it.options.length > 0 && (
-                                <Text style={styles.itemOptions}>
-                                  {it.options.join(', ')}
-                                </Text>
-                              )}
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-
-                      {!!order.specialNotes && (
-                        <View style={styles.specialNotesBox}>
-                          <Text style={styles.specialNotesLabel}>📝 โน้ตจากลูกค้า:</Text>
-                          <Text style={styles.specialNotesText}>{order.specialNotes}</Text>
-                        </View>
-                      )}
-
-                      <TouchableOpacity
-                        style={styles.actionBtnReady}
-                        onPress={() => storeActions.updateOrderStatus(order.id, 'READY')}
-                        activeOpacity={0.8}
-                      >
-                        <Icon name="check" size={14} color={COLORS.textWhite} strokeWidth={2.5} />
-                        <Text style={styles.actionBtnReadyText}>เสร็จแล้ว (แจ้ง นศ.)</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-              )}
-            </View>
-
-            {/* Column 3: ● เสร็จแล้ว (Ready for Pickup) */}
-            <View style={styles.column}>
-              <View style={styles.columnHeader}>
-                <View style={[styles.statusDot, { backgroundColor: COLORS.green }]} />
-                <Text style={styles.columnTitle}>พร้อมรับ {readyOrders.length}</Text>
-              </View>
-
-              {readyOrders.length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyText}>ไม่มีออเดอร์</Text>
-                </View>
-              ) : (
-                <ScrollView style={styles.cardList} showsVerticalScrollIndicator={false}>
-                  {readyOrders.map((order) => (
-                    <View key={order.id} style={[styles.orderCard, styles.orderCardGreen]}>
-                      <View style={styles.cardTopRow}>
-                        <Text style={styles.readyQueueNum}>#{order.orderNumber}</Text>
-                        <Text style={styles.pinTag}>PIN: {order.pickupQrPin}</Text>
-                      </View>
-
-                      <View style={styles.customerRow}>
-                        <Icon name="user" size={13} color={COLORS.textSecondary} strokeWidth={2} />
-                        <Text style={styles.customerText}>
-                          {order.studentName} • {order.items[0]?.name}
-                        </Text>
-                      </View>
-
-                      {!!order.specialNotes && (
-                        <View style={styles.specialNotesBoxSmall}>
-                          <Text style={styles.specialNotesTextSmall} numberOfLines={1}>
-                            📝 {order.specialNotes}
-                          </Text>
-                        </View>
-                      )}
-
-                      <TouchableOpacity
-                        style={styles.actionBtnHandover}
-                        onPress={() => storeActions.updateOrderStatus(order.id, 'COMPLETED')}
-                        activeOpacity={0.8}
-                      >
-                        <Icon name="check" size={14} color={COLORS.textWhite} strokeWidth={2.5} />
-                        <Text style={styles.actionBtnHandoverText}>ส่งมอบอาหารแล้ว</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-              )}
-            </View>
-          </ScrollView>
-
-          {/* Quick Order Simulation Bar at Bottom */}
-          <View style={styles.simulateBar}>
-            <TouchableOpacity
-              style={styles.simulateBtn}
-              onPress={handleSimulateNewOrder}
-              activeOpacity={0.8}
+          {/* Mobile-First Segmented Stage Filter Tabs (No awkward horizontal column clipping!) */}
+          <View style={styles.stageTabsContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.stageTabsScroll}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Icon name="plus" size={15} color={COLORS.primary} strokeWidth={2.5} />
-                <Text style={styles.simulateText}>ทดลองส่งออเดอร์ใหม่เข้าครัว (Simulate Order)</Text>
-              </View>
-            </TouchableOpacity>
+              {[
+                { key: 'cooking', label: 'กำลังทำ', count: cookingOrders.length, color: COLORS.primary },
+                { key: 'almost_ready', label: 'ใกล้เสร็จ', count: almostReadyOrders.length, color: '#D97706' },
+                { key: 'ready', label: 'พร้อมรับ', count: readyOrders.length, color: '#16A34A' },
+                { key: 'all', label: 'ทั้งหมด', count: totalActiveOrders, color: '#0F172A' },
+              ].map((tab) => {
+                const isActive = activeStageTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    style={[
+                      styles.stageTabPill,
+                      isActive && { backgroundColor: tab.color, borderColor: tab.color },
+                    ]}
+                    onPress={() => setActiveStageTab(tab.key)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.stageTabLabel, isActive && styles.stageTabLabelActive]}>
+                      {tab.label}
+                    </Text>
+                    <View
+                      style={[
+                        styles.stageCountBadge,
+                        isActive && styles.stageCountBadgeActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.stageCountText,
+                          isActive && { color: tab.color, fontWeight: '700' },
+                        ]}
+                      >
+                        {tab.count}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
+
+          {/* Full-Width Vertical Scrollable Orders List (Clean 1-Thumb Mobile UX) */}
+          <ScrollView
+            style={styles.verticalScroll}
+            contentContainerStyle={styles.verticalScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {activeStageTab === 'cooking' && (
+              <>
+                {cookingOrders.length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Icon name="coffee" size={32} color="#94A3B8" strokeWidth={1.8} style={{ marginBottom: 8 }} />
+                    <Text style={styles.emptyTitle}>ไม่มีออเดอร์ที่กำลังปรุง</Text>
+                    <Text style={styles.emptySubtitle}>เมื่อมีคำสั่งซื้อใหม่เข้ามา รายการจะปรากฏที่นี่ทันที</Text>
+                  </View>
+                ) : (
+                  cookingOrders.map((o) => renderOrderCard(o, 'cooking'))
+                )}
+              </>
+            )}
+
+            {activeStageTab === 'almost_ready' && (
+              <>
+                {almostReadyOrders.length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Icon name="clock" size={32} color="#94A3B8" strokeWidth={1.8} style={{ marginBottom: 8 }} />
+                    <Text style={styles.emptyTitle}>ไม่มีออเดอร์ในสถานะใกล้เสร็จ</Text>
+                    <Text style={styles.emptySubtitle}>เมื่อแม่ค้ากด "ใกล้เสร็จแล้ว" ระบบจะแจ้งเตือนให้นักศึกษาเริ่มเดินมารับ</Text>
+                  </View>
+                ) : (
+                  almostReadyOrders.map((o) => renderOrderCard(o, 'almost_ready'))
+                )}
+              </>
+            )}
+
+            {activeStageTab === 'ready' && (
+              <>
+                {readyOrders.length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Icon name="check" size={32} color="#94A3B8" strokeWidth={1.8} style={{ marginBottom: 8 }} />
+                    <Text style={styles.emptyTitle}>ไม่มีออเดอร์ที่พร้อมรับ</Text>
+                    <Text style={styles.emptySubtitle}>ออเดอร์ที่ปรุงเสร็จแล้วและรอนักศึกษามาสแกนรับจะแสดงที่นี่</Text>
+                  </View>
+                ) : (
+                  readyOrders.map((o) => renderOrderCard(o, 'ready'))
+                )}
+              </>
+            )}
+
+            {activeStageTab === 'all' && (
+              <>
+                {totalActiveOrders === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Icon name="inbox" size={32} color="#94A3B8" strokeWidth={1.8} style={{ marginBottom: 8 }} />
+                    <Text style={styles.emptyTitle}>ไม่มีออเดอร์ในระบบขณะนี้</Text>
+                    <Text style={styles.emptySubtitle}>ร้านของคุณพร้อมรับออเดอร์แล้ว</Text>
+                  </View>
+                ) : (
+                  <>
+                    {cookingOrders.length > 0 && (
+                      <View style={styles.sectionHeaderWrap}>
+                        <View style={[styles.sectionDot, { backgroundColor: COLORS.primary }]} />
+                        <Text style={styles.sectionHeading}>กำลังทำ ({cookingOrders.length})</Text>
+                      </View>
+                    )}
+                    {cookingOrders.map((o) => renderOrderCard(o, 'cooking'))}
+
+                    {almostReadyOrders.length > 0 && (
+                      <View style={[styles.sectionHeaderWrap, { marginTop: 14 }]}>
+                        <View style={[styles.sectionDot, { backgroundColor: '#D97706' }]} />
+                        <Text style={styles.sectionHeading}>ใกล้เสร็จ ({almostReadyOrders.length})</Text>
+                      </View>
+                    )}
+                    {almostReadyOrders.map((o) => renderOrderCard(o, 'almost_ready'))}
+
+                    {readyOrders.length > 0 && (
+                      <View style={[styles.sectionHeaderWrap, { marginTop: 14 }]}>
+                        <View style={[styles.sectionDot, { backgroundColor: '#16A34A' }]} />
+                        <Text style={styles.sectionHeading}>พร้อมรับ ({readyOrders.length})</Text>
+                      </View>
+                    )}
+                    {readyOrders.map((o) => renderOrderCard(o, 'ready'))}
+                  </>
+                )}
+              </>
+            )}
+
+            {/* Quick Order Simulation Bar */}
+            <View style={styles.simulateBar}>
+              <TouchableOpacity
+                style={styles.simulateBtn}
+                onPress={handleSimulateNewOrder}
+                activeOpacity={0.85}
+              >
+                <Icon name="plus" size={15} color={COLORS.primary} strokeWidth={2.5} style={{ marginRight: 6 }} />
+                <Text style={styles.simulateText}>ทดลองส่งออเดอร์ใหม่เข้าครัว (Simulate Order)</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
         </>
       )}
     </View>
@@ -359,6 +440,7 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
     minWidth: 0,
+    marginRight: 8,
   },
   headerTitle: {
     color: COLORS.textPrimary,
@@ -378,286 +460,336 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   shopStatusText: {
-    fontSize: 11,
+    fontSize: 12,
     ...TYPOGRAPHY.bold,
+    marginRight: 4,
   },
   textGreen: {
-    color: COLORS.green,
+    color: '#10B981',
   },
   textMuted: {
-    color: COLORS.textMuted,
+    color: '#94A3B8',
   },
   ordersBadge: {
-    backgroundColor: COLORS.primaryLight,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
   },
   ordersBadgeText: {
     color: COLORS.primary,
     fontSize: 11,
     ...TYPOGRAPHY.bold,
   },
-  columnsContainer: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    gap: 12,
+  // Stage Filter Tabs
+  stageTabsContainer: {
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingVertical: 10,
   },
-  column: {
-    width: 270,
-    maxHeight: '88%',
+  stageTabsScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
   },
-  columnHeader: {
+  stageTabPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-    paddingHorizontal: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: 6,
   },
-  statusDot: {
+  stageTabLabel: {
+    fontSize: 13,
+    ...TYPOGRAPHY.bold,
+    color: COLORS.textPrimary,
+  },
+  stageTabLabelActive: {
+    color: '#FFFFFF',
+  },
+  stageCountBadge: {
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  stageCountBadgeActive: {
+    backgroundColor: '#FFFFFF',
+  },
+  stageCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+  },
+  // Vertical Scroll Orders List
+  verticalScroll: {
+    flex: 1,
+  },
+  verticalScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 60,
+  },
+  sectionHeaderWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 6,
+  },
+  sectionDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  columnTitle: {
-    color: COLORS.textPrimary,
+  sectionHeading: {
     fontSize: 14,
     ...TYPOGRAPHY.bold,
+    color: COLORS.textPrimary,
   },
-  emptyCard: {
-    height: 120,
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#CBD5E1',
-    borderStyle: 'dashed',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: COLORS.textMuted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  cardList: {
-    gap: 12,
-  },
+  // Order Card
   orderCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    shadowColor: '#000',
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: '#FED7AA',
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  orderCardYellow: {
-    borderColor: 'rgba(245, 158, 11, 0.4)',
+  orderCardAmber: {
+    borderColor: '#FDE68A',
   },
   orderCardGreen: {
-    borderColor: 'rgba(16, 185, 129, 0.4)',
+    borderColor: '#BBF7D0',
   },
   cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   orderNumber: {
     color: COLORS.primary,
-    fontSize: 18,
+    fontSize: 20,
     ...TYPOGRAPHY.black,
   },
-  readyQueueNum: {
-    color: COLORS.green,
-    fontSize: 18,
-    ...TYPOGRAPHY.black,
+  grabTypePill: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
-  timeTag: {
-    backgroundColor: COLORS.primaryLight,
+  grabTypeText: {
+    color: '#D97706',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  timeTagCooking: {
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  timeTagCookingText: {
     color: COLORS.primary,
-    fontSize: 10,
-    ...TYPOGRAPHY.bold,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  almostTimeTag: {
-    backgroundColor: COLORS.yellowLight,
-    color: COLORS.yellow,
-    fontSize: 10,
-    ...TYPOGRAPHY.bold,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  pinTag: {
-    backgroundColor: COLORS.greenLight,
-    color: COLORS.green,
     fontSize: 11,
     ...TYPOGRAPHY.bold,
+  },
+  pulsingBadge: {
+    backgroundColor: '#FEF3C7',
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  pulsingText: {
+    color: '#D97706',
+    fontSize: 11,
+    ...TYPOGRAPHY.bold,
+  },
+  pinTag: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  pinTagText: {
+    color: '#16A34A',
+    fontSize: 11,
+    ...TYPOGRAPHY.bold,
   },
   customerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   customerText: {
+    fontSize: 12,
     color: COLORS.textSecondary,
-    fontSize: 11,
+    ...TYPOGRAPHY.medium,
   },
-  itemsDivider: {
-    height: 1,
-    backgroundColor: COLORS.borderLight,
-    marginBottom: 8,
+  orderItemsBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+    gap: 6,
   },
-  itemBox: {
-    marginBottom: 6,
+  itemLine: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  itemQty: {
+    color: COLORS.primary,
+    fontSize: 13,
+    ...TYPOGRAPHY.bold,
   },
   itemName: {
     color: COLORS.textPrimary,
-    fontSize: 14,
+    fontSize: 13,
     ...TYPOGRAPHY.bold,
   },
-  itemNameBold: {
-    color: COLORS.textPrimary,
-    fontSize: 14,
-    ...TYPOGRAPHY.bold,
-    marginBottom: 8,
+  itemOptions: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
   },
-  notesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 4,
-  },
-  notePill: {
+  specialNotesBox: {
     backgroundColor: '#FFF7ED',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#FED7AA',
   },
-  noteText: {
-    color: '#C2410C',
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  specialNotesBox: {
-    backgroundColor: 'rgba(234, 88, 12, 0.08)',
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.sutOrange,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginTop: 6,
-    marginBottom: 8,
-  },
   specialNotesLabel: {
-    ...TYPOGRAPHY.bold,
-    color: COLORS.sutOrangeBright,
+    color: '#C2410C',
     fontSize: 11,
-    marginBottom: 2,
+    ...TYPOGRAPHY.bold,
   },
   specialNotesText: {
-    ...TYPOGRAPHY.medium,
-    color: COLORS.textPrimary,
+    color: '#9A3412',
     fontSize: 12,
     lineHeight: 16,
   },
-  specialNotesBoxSmall: {
-    backgroundColor: 'rgba(234, 88, 12, 0.08)',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 4,
-    marginTop: 4,
-    marginBottom: 6,
-  },
-  specialNotesTextSmall: {
-    ...TYPOGRAPHY.medium,
-    color: COLORS.sutOrangeBright,
-    fontSize: 10,
-  },
-  cardFooter: {
-    marginTop: 8,
-  },
   actionBtnAlmost: {
+    backgroundColor: COLORS.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
   },
   actionBtnAlmostText: {
-    color: COLORS.textPrimary,
-    fontSize: 12,
-    fontWeight: '700',
+    color: '#FFFFFF',
+    fontSize: 13,
+    ...TYPOGRAPHY.bold,
   },
   actionBtnReady: {
+    backgroundColor: '#D97706',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    backgroundColor: COLORS.primary,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#D97706',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
   },
   actionBtnReadyText: {
-    color: COLORS.textWhite,
-    fontSize: 12,
+    color: '#FFFFFF',
+    fontSize: 13,
     ...TYPOGRAPHY.bold,
   },
   actionBtnHandover: {
+    backgroundColor: '#16A34A',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
-    backgroundColor: COLORS.green,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#16A34A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
   },
   actionBtnHandoverText: {
-    color: COLORS.textWhite,
-    fontSize: 12,
+    color: '#FFFFFF',
+    fontSize: 13,
     ...TYPOGRAPHY.bold,
   },
-  simulateBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  // Empty State
+  emptyCard: {
     backgroundColor: COLORS.surface,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 12,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    ...TYPOGRAPHY.bold,
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  // Simulate Order Bar
+  simulateBar: {
+    marginTop: 10,
+    marginBottom: 20,
   },
   simulateBtn: {
-    backgroundColor: COLORS.primaryLight,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
     borderWidth: 1,
-    borderColor: 'rgba(255, 94, 58, 0.3)',
+    borderColor: '#FED7AA',
+    borderStyle: 'dashed',
+    borderRadius: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   simulateText: {
     color: COLORS.primary,
     fontSize: 12,
     ...TYPOGRAPHY.bold,
   },
+  // No Stall Container
   noStallCardContainer: {
     flex: 1,
+    padding: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 30,
-    backgroundColor: COLORS.background,
   },
   noStallIconCircle: {
     width: 80,
@@ -666,16 +798,14 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 94, 58, 0.25)',
+    marginBottom: 16,
   },
   noStallMainTitle: {
     fontSize: 18,
-    ...TYPOGRAPHY.black,
+    ...TYPOGRAPHY.bold,
     color: COLORS.textPrimary,
-    marginBottom: 10,
     textAlign: 'center',
+    marginBottom: 8,
   },
   noStallMainSubtitle: {
     fontSize: 13,
@@ -683,19 +813,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
-    maxWidth: 320,
+    paddingHorizontal: 16,
   },
   openShopBigBtn: {
+    backgroundColor: COLORS.primary,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 24,
     paddingVertical: 14,
-    borderRadius: 25,
+    paddingHorizontal: 24,
+    borderRadius: 16,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 4,
   },

@@ -45,11 +45,63 @@ export default function App() {
 
   // Main active tab for consumer: 'home' | 'search' | 'orders' | 'profile'
   const [activeTab, setActiveTab] = useState('home');
+  const [visitedTabs, setVisitedTabs] = useState(new Set(['home']));
   const [highlightWallet, setHighlightWallet] = useState(false);
+  const [targetStallForHome, setTargetStallForHome] = useState(null);
+  const [targetQuickOrder, setTargetQuickOrder] = useState(null);
+
+  useEffect(() => {
+    if (!visitedTabs.has(activeTab)) {
+      setVisitedTabs((prev) => new Set(prev).add(activeTab));
+    }
+  }, [activeTab]);
 
   const handleRequireTopUp = () => {
     setHighlightWallet(true);
     setActiveTab('profile');
+  };
+
+  const handleQuickOrderFavorite = (favDish) => {
+    if (!favDish) return;
+    const matchedStall = (state.stalls || []).find(
+      (s) =>
+        (favDish.stallId && s.id === favDish.stallId) ||
+        (favDish.stallName && (s.thaiName === favDish.stallName || s.name === favDish.stallName))
+    );
+
+    let targetMenu = matchedStall?.menus?.find((m) => m.id === favDish.id || m.name === favDish.name);
+    if (!targetMenu) {
+      targetMenu = {
+        id: favDish.id,
+        name: favDish.name,
+        price: favDish.price,
+        desc: favDish.desc || '',
+        imageUrl: favDish.imageUrl,
+      };
+    }
+
+    const fallbackStall = matchedStall || {
+      id: favDish.stallId || 'stall-temp',
+      name: favDish.stallName || 'ร้านค้า มทส.',
+      thaiName: favDish.stallName || 'ร้านค้า มทส.',
+      canteenId: favDish.canteenId || 'canteen-5',
+      isOpen: true,
+    };
+
+    if (fallbackStall.isOpen === false) {
+      Alert.alert('ร้านปิดให้บริการ', `ร้าน "${fallbackStall.thaiName || fallbackStall.name}" ปิดให้บริการอยู่ในขณะนี้`);
+      return;
+    }
+
+    if (fallbackStall.canteenId) {
+      const matchedCanteen = (state.canteens || []).find((c) => c.id === fallbackStall.canteenId);
+      if (matchedCanteen) {
+        storeActions.setSelectedCanteen(matchedCanteen);
+      }
+    }
+
+    setTargetQuickOrder({ menu: targetMenu, stall: fallbackStall });
+    setActiveTab('home');
   };
 
   useEffect(() => {
@@ -91,6 +143,7 @@ export default function App() {
 
         setCurrentUser(sessionUser);
         setIsAuthenticated(true);
+        store.setUser(sessionUser);
       } catch (err) {
         console.warn('Failed to restore saved session:', err);
         setIsAuthenticated(false);
@@ -154,6 +207,10 @@ export default function App() {
     reloadStalls: () => store.reloadStalls(),
     updateStallImage: (stallId, imageUrl) => store.updateStallImage(stallId, imageUrl),
     releaseOrderNow: (orderId) => store.releaseOrderNow(orderId),
+    toggleFavoriteStall: (stall) => store.toggleFavoriteStall(stall),
+    toggleFavoriteDish: (menu, stall) => store.toggleFavoriteDish(menu, stall),
+    isFavoriteStall: (stallId) => store.isFavoriteStall(stallId),
+    isFavoriteDish: (menuId, menuName) => store.isFavoriteDish(menuId, menuName),
   };
 
   // Auth Handlers
@@ -165,6 +222,7 @@ export default function App() {
 
     setCurrentUser(cleanUser);
     setIsAuthenticated(true);
+    store.setUser(cleanUser);
 
     if (rememberMe) {
       await authService.saveSession(cleanUser);
@@ -194,6 +252,7 @@ export default function App() {
     } catch (e) { }
     setIsAuthenticated(false);
     setCurrentUser(null);
+    store.setUser(null);
     setAuthView('signin');
     setActiveTab('home');
   };
@@ -262,66 +321,106 @@ export default function App() {
         ) : (
           /* Strictly Consumer Interface - No merchant KDS access */
           <View style={styles.appBody}>
-            {activeTab === 'home' && (
-              <HomeScreen
-                storeState={state}
-                storeActions={storeActions}
-                currentUser={currentUser}
-                onOpenSearch={() => setActiveTab('search')}
-                onNavigateTracking={() => setActiveTab('orders')}
-                onRequireTopUp={handleRequireTopUp}
-                onOpenProfile={() => setActiveTab('profile')}
-              />
+            {visitedTabs.has('home') && (
+              <View style={[styles.tabContentContainer, activeTab !== 'home' && styles.tabContentHidden]}>
+                <HomeScreen
+                  storeState={state}
+                  storeActions={storeActions}
+                  currentUser={currentUser}
+                  targetStall={targetStallForHome}
+                  onClearTargetStall={() => setTargetStallForHome(null)}
+                  targetQuickOrder={targetQuickOrder}
+                  onClearTargetQuickOrder={() => setTargetQuickOrder(null)}
+                  onOpenSearch={() => setActiveTab('search')}
+                  onNavigateTracking={() => setActiveTab('orders')}
+                  onRequireTopUp={handleRequireTopUp}
+                  onOpenProfile={() => setActiveTab('profile')}
+                  onQuickOrderDish={handleQuickOrderFavorite}
+                />
+              </View>
             )}
 
-            {activeTab === 'search' && (
-              <SearchScreen
-                stalls={state.stalls || []}
-                storeState={state}
-                storeActions={storeActions}
-                currentUser={currentUser}
-                onRequireTopUp={handleRequireTopUp}
-                onNavigateTracking={() => setActiveTab('orders')}
-                onSelectStall={(stall) => {
-                  if (stall?.canteenId) {
-                    const matchedCanteen = (state.canteens || []).find((c) => c.id === stall.canteenId);
-                    if (matchedCanteen) {
-                      storeActions.setSelectedCanteen(matchedCanteen);
+            {visitedTabs.has('search') && (
+              <View style={[styles.tabContentContainer, activeTab !== 'search' && styles.tabContentHidden]}>
+                <SearchScreen
+                  stalls={state.stalls || []}
+                  storeState={state}
+                  storeActions={storeActions}
+                  currentUser={currentUser}
+                  onRequireTopUp={handleRequireTopUp}
+                  onNavigateTracking={() => setActiveTab('orders')}
+                  onSelectStall={(stall) => {
+                    if (stall?.canteenId) {
+                      const matchedCanteen = (state.canteens || []).find((c) => c.id === stall.canteenId);
+                      if (matchedCanteen) {
+                        storeActions.setSelectedCanteen(matchedCanteen);
+                      }
                     }
-                  }
-                  setActiveTab('home');
-                }}
-              />
+                    setActiveTab('home');
+                  }}
+                />
+              </View>
             )}
 
-            {activeTab === 'orders' && (
-              <OrderTrackingView
-                orders={userOrders}
-                currentUser={currentUser}
-                rewardsPoints={state.rewardsPoints || 0}
-                walletBalance={state.walletBalance || 0}
-                onNavigateHome={() => setActiveTab('home')}
-                onCompletePickup={(orderId) => storeActions.updateOrderStatus(orderId, 'COMPLETED')}
-                onReleaseOrderNow={(orderId) => storeActions.releaseOrderNow(orderId)}
-              />
+            {visitedTabs.has('orders') && (
+              <View style={[styles.tabContentContainer, activeTab !== 'orders' && styles.tabContentHidden]}>
+                <OrderTrackingView
+                  orders={userOrders}
+                  currentUser={currentUser}
+                  rewardsPoints={state.rewardsPoints || 0}
+                  walletBalance={state.walletBalance || 0}
+                  stalls={state.stalls || []}
+                  canteens={state.canteens || []}
+                  onNavigateHome={() => setActiveTab('home')}
+                  onSelectStall={(stall) => {
+                    if (stall?.canteenId) {
+                      const matchedCanteen = (state.canteens || []).find((c) => c.id === stall.canteenId);
+                      if (matchedCanteen) {
+                        storeActions.setSelectedCanteen(matchedCanteen);
+                      }
+                    }
+                    setActiveTab('home');
+                  }}
+                  onCompletePickup={(orderId) => storeActions.updateOrderStatus(orderId, 'COMPLETED')}
+                  onReleaseOrderNow={(orderId) => storeActions.releaseOrderNow(orderId)}
+                />
+              </View>
             )}
 
-            {activeTab === 'profile' && (
-              <ProfileScreen
-                currentUser={currentUser}
-                currentBuilding={state.currentBuilding}
-                walletBalance={state.walletBalance}
-                rewardsPoints={state.rewardsPoints}
-                highlightWallet={highlightWallet}
-                onResetHighlight={() => setHighlightWallet(false)}
-                onSelectBuilding={storeActions.setBuilding}
-                onTopUpWallet={storeActions.topUpWallet}
-                onNavigateOrders={() => setActiveTab('orders')}
-                onNavigateSearch={() => setActiveTab('search')}
-                onUpdateProfile={handleUpdateProfile}
-                onRefreshProfile={handleRefreshProfile}
-                onLogout={handleLogout}
-              />
+            {visitedTabs.has('profile') && (
+              <View style={[styles.tabContentContainer, activeTab !== 'profile' && styles.tabContentHidden]}>
+                <ProfileScreen
+                  currentUser={currentUser}
+                  currentBuilding={state.currentBuilding}
+                  walletBalance={state.walletBalance}
+                  rewardsPoints={state.rewardsPoints}
+                  highlightWallet={highlightWallet}
+                  favoriteDishes={state.favoriteDishes || []}
+                  favoriteStallIds={state.favoriteStallIds || []}
+                  stalls={state.stalls || []}
+                  onQuickOrderDish={handleQuickOrderFavorite}
+                  onSelectStall={(stall) => {
+                    if (stall?.canteenId) {
+                      const matchedCanteen = (state.canteens || []).find((c) => c.id === stall.canteenId);
+                      if (matchedCanteen) {
+                        storeActions.setSelectedCanteen(matchedCanteen);
+                      }
+                    }
+                    setTargetStallForHome(stall);
+                    setActiveTab('home');
+                  }}
+                  onToggleFavoriteDish={storeActions.toggleFavoriteDish}
+                  onToggleFavoriteStall={storeActions.toggleFavoriteStall}
+                  onResetHighlight={() => setHighlightWallet(false)}
+                  onSelectBuilding={storeActions.setBuilding}
+                  onTopUpWallet={storeActions.topUpWallet}
+                  onNavigateOrders={() => setActiveTab('orders')}
+                  onNavigateSearch={() => setActiveTab('search')}
+                  onUpdateProfile={handleUpdateProfile}
+                  onRefreshProfile={handleRefreshProfile}
+                  onLogout={handleLogout}
+                />
+              </View>
             )}
 
             {/* Bottom Navigation Bar (Shown strictly on consumer tabs) */}
@@ -374,5 +473,11 @@ const styles = StyleSheet.create({
   },
   appBody: {
     flex: 1,
+  },
+  tabContentContainer: {
+    flex: 1,
+  },
+  tabContentHidden: {
+    display: 'none',
   },
 });

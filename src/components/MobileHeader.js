@@ -15,6 +15,8 @@ export default function MobileHeader({
   onSelectCanteen,
   onOpenSearch,
   onOpenProfile,
+  onOpenFavorites,
+  stalls = [],
 }) {
   const [showCanteenPicker, setShowCanteenPicker] = useState(false);
   const cleanAvatarUri = sanitizeAvatarUri(avatarUri);
@@ -53,10 +55,23 @@ export default function MobileHeader({
         </View>
       </View>
 
-      {/* Circular Search Button */}
-      <TouchableOpacity style={styles.searchBtn} onPress={onOpenSearch} activeOpacity={0.8}>
-        <Icon name="search" size={18} color={COLORS.textPrimary} strokeWidth={2} />
-      </TouchableOpacity>
+      {/* Right Actions: Favorites Heart + Circular Search Button */}
+      <View style={styles.rightActionsRow}>
+        {onOpenFavorites && (
+          <TouchableOpacity
+            style={styles.favHeaderBtn}
+            onPress={onOpenFavorites}
+            activeOpacity={0.8}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Icon name="heart" size={18} color="#E11D48" variant="filled" />
+          </TouchableOpacity>
+        )}
+
+        <TouchableOpacity style={styles.searchBtn} onPress={onOpenSearch} activeOpacity={0.8}>
+          <Icon name="search" size={18} color={COLORS.textPrimary} strokeWidth={2} />
+        </TouchableOpacity>
+      </View>
 
       {/* Modern Canteen Selector Modal matching Reference Image 2 */}
       <CanteenSelectModal
@@ -64,6 +79,7 @@ export default function MobileHeader({
         onClose={() => setShowCanteenPicker(false)}
         selectedCanteen={selectedCanteen}
         onSelectCanteen={onSelectCanteen}
+        stalls={stalls}
       />
     </View>
   );
@@ -131,6 +147,21 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 11,
     marginLeft: 2,
+  },
+  rightActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  favHeaderBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF1F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFE4E6',
   },
   searchBtn: {
     width: 40,

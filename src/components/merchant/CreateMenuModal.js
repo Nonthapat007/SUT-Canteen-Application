@@ -30,7 +30,7 @@ const QUICK_TEMPLATES = [
   { name: 'ไม่ใส่ผัก/ถั่ว', price: 0 },
   { name: 'เผ็ดน้อย', price: 0 },
   { name: 'เผ็ดปกติ', price: 0 },
-  { name: 'เผ็ดจัดจ้าน 🔥', price: 0 },
+  { name: 'เผ็ดจัดจ้าน', price: 0 },
   { name: 'เพิ่มหมูกรอบ', price: 15 },
   { name: 'เพิ่มลูกชิ้น', price: 10 },
   { name: 'หวานน้อย', price: 0 },
@@ -249,7 +249,6 @@ export default function CreateMenuModal({ visible, stallId, onClose, onSuccess }
             <View style={styles.optionsContainer}>
               <View style={styles.optionsHeaderRow}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={{ fontSize: 16 }}>🍲</Text>
                   <Text style={styles.optionsTitle}>ท็อปปิ้ง & ตัวเลือกเพิ่มเติม</Text>
                 </View>
                 <Text style={styles.optionsCountTag}>{options.length} ตัวเลือก</Text>
@@ -259,7 +258,7 @@ export default function CreateMenuModal({ visible, stallId, onClose, onSuccess }
               </Text>
 
               {/* Quick Template Chips */}
-              <Text style={styles.templateSectionLabel}>⚡ แตะเพื่อเพิ่มเทมเพลตด่วน:</Text>
+              <Text style={styles.templateSectionLabel}>แตะเพื่อเพิ่มเทมเพลตด่วน:</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.templatesScroll}>
                 {QUICK_TEMPLATES.map((tpl, idx) => (
                   <TouchableOpacity
@@ -335,7 +334,7 @@ export default function CreateMenuModal({ visible, stallId, onClose, onSuccess }
               >
                 <View style={{ flex: 1, marginRight: 10 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.switchTitle}>🌟 เมนูแนะนำ (Popular Badge)</Text>
+                    <Text style={styles.switchTitle}>เมนูแนะนำ (Popular Badge)</Text>
                     {isPopular && (
                       <View style={styles.activePillOrange}>
                         <Text style={styles.activePillTextOrange}>เปิดอยู่</Text>
@@ -362,7 +361,7 @@ export default function CreateMenuModal({ visible, stallId, onClose, onSuccess }
               >
                 <View style={{ flex: 1, marginRight: 10 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.switchTitle}>⚡ Grab & Go (Fast-Lane 0 นาที)</Text>
+                    <Text style={styles.switchTitle}>Grab & Go (Fast-Lane 0 นาที)</Text>
                     {isGrabAndGo && (
                       <View style={styles.activePillGreen}>
                         <Text style={styles.activePillTextGreen}>เปิดอยู่</Text>
@@ -435,7 +434,7 @@ export default function CreateMenuModal({ visible, stallId, onClose, onSuccess }
                 >
                   <Icon name="camera" size={16} color={COLORS.primary} strokeWidth={2.2} />
                   <Text style={styles.pickFromDeviceText}>
-                    {selectedImage ? '📸 เปลี่ยนรูปภาพจากในเครื่อง' : '📸 เลือกรูปภาพจากเครื่อง (เลือกรูปเอง)'}
+                    {selectedImage ? 'เปลี่ยนรูปภาพจากในเครื่อง' : 'เลือกรูปภาพจากเครื่อง (เลือกรูปเอง)'}
                   </Text>
                 </TouchableOpacity>
               </View>

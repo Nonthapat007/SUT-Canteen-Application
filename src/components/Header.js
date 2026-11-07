@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'rea
 import { COLORS } from '../constants/colors';
 import { TYPOGRAPHY } from '../constants/typography';
 import { SUT_BUILDINGS } from '../constants/campusData';
+import Icon from './common/Icon';
 
 export default function Header({
   currentRole,
@@ -46,7 +47,7 @@ export default function Header({
               activeOpacity={0.8}
             >
               <Text style={styles.ordersPillText}>
-                {activeOrdersCount > 0 ? `🔥 ติดตามคิว (${activeOrdersCount})` : '📋 ออเดอร์'}
+                {activeOrdersCount > 0 ? `ติดตามคิว (${activeOrdersCount})` : 'ออเดอร์'}
               </Text>
             </TouchableOpacity>
           )}
@@ -60,9 +61,6 @@ export default function Header({
             onPress={() => onRoleChange(currentRole === 'consumer' ? 'vendor' : 'consumer')}
             activeOpacity={0.85}
           >
-            <Text style={styles.roleToggleIcon}>
-              {currentRole === 'consumer' ? '👨‍🍳' : '📱'}
-            </Text>
             <Text style={styles.roleToggleText}>
               {currentRole === 'consumer' ? 'จอแม่ค้า (KDS)' : 'โหมดนักศึกษา'}
             </Text>
@@ -96,7 +94,7 @@ export default function Header({
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>📍 ระบุอาคารเรียนของคุณใน มทส.</Text>
+              <Text style={styles.modalTitle}>ระบุอาคารเรียนของคุณใน มทส.</Text>
               <Text style={styles.modalSubtitle}>
                 ระบบ Geofence จะคำนวณโรงอาหารใกล้สุดและเวลาเดินเท้าให้อัตโนมัติ
               </Text>
@@ -122,7 +120,7 @@ export default function Header({
                         โซน: {bld.zone} • รหัส: {bld.code}
                       </Text>
                     </View>
-                    {isSelected && <Text style={styles.checkMark}>✓</Text>}
+                    {isSelected && <Icon name="check" size={16} color={COLORS.primary} strokeWidth={2.5} />}
                   </TouchableOpacity>
                 );
               })}

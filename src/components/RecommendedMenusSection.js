@@ -15,6 +15,8 @@ import { getFoodImageFallback } from '../utils/imageUtils';
 export default function RecommendedMenusSection({
   items = [],
   onSelectMenu,
+  isFavoriteDish,
+  onToggleFavoriteDish,
 }) {
   return (
     <View style={styles.container}>
@@ -86,6 +88,27 @@ export default function RecommendedMenusSection({
                   <View style={styles.priceTag}>
                     <Text style={styles.priceTagText}>฿{menu.price}</Text>
                   </View>
+
+                  {/* Favorite Heart Button */}
+                  {onToggleFavoriteDish && (
+                    <TouchableOpacity
+                      style={styles.favDishBtn}
+                      onPress={(e) => {
+                        e.stopPropagation?.();
+                        onToggleFavoriteDish(menu, stall);
+                      }}
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      activeOpacity={0.8}
+                    >
+                      <Icon
+                        name="heart"
+                        size={13}
+                        color={isFavoriteDish && isFavoriteDish(menu) ? '#EF4444' : '#FFFFFF'}
+                        variant={isFavoriteDish && isFavoriteDish(menu) ? 'filled' : 'outline'}
+                        strokeWidth={2}
+                      />
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 {/* Food Card Details */}
@@ -213,6 +236,20 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.bold,
     fontSize: 10,
     color: '#FFFFFF',
+  },
+  favDishBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   priceTag: {
     position: 'absolute',

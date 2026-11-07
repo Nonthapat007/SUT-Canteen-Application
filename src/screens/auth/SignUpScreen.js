@@ -4,7 +4,7 @@
 // 2. Merchant (ร้านค้า/ผู้ประกอบการ)
 // Adaptive identification field (Student ID, Staff ID, Citizen ID, Phone Number)
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  KeyboardAvoidingView,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { COLORS } from '../../constants/colors';
 import { TYPOGRAPHY } from '../../constants/typography';
@@ -20,6 +23,62 @@ import Icon from '../../components/common/Icon';
 import authService from '../../services/authService';
 
 export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
+  // Input references for smooth keyboard navigation on mobile
+  const scrollViewRef = useRef(null);
+  const fullNameInputRef = useRef(null);
+  const idInputRef = useRef(null);
+  const emailInputRef = useRef(null);
+  const passwordInputRef = useRef(null);
+  const inputLayouts = useRef({});
+
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
+
+  const handleFieldLayout = (field) => (e) => {
+    inputLayouts.current[field] = e.nativeEvent.layout.y;
+  };
+
+  const scrollToField = (field) => {
+    const doScroll = () => {
+      if (field === 'password') {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+        return;
+      }
+      const formY = inputLayouts.current['form'] || 0;
+      const fieldY = inputLayouts.current[field] || 0;
+      const targetY = formY + fieldY - 30;
+      if (targetY > 0) {
+        scrollViewRef.current?.scrollTo({ y: targetY, animated: true });
+      }
+    };
+    doScroll();
+    setTimeout(doScroll, 80);
+    setTimeout(doScroll, 220);
+  };
+
+  useEffect(() => {
+    const onShow = (e) => {
+      const height = e?.endCoordinates?.height || 300;
+      setKeyboardOffset(height);
+    };
+    const onHide = () => {
+      setKeyboardOffset(0);
+    };
+
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      onShow
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      onHide
+    );
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const [role, setRole] = useState('customer'); // 'customer' | 'merchant'
   const [customerType, setCustomerType] = useState('student'); // 'student' | 'staff' | 'general'
   const [fullName, setFullName] = useState('');
@@ -126,8 +185,26 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Top Burger / Food Icon */}
+    <KeyboardAvoidingView
+      style={styles.keyboardAvoidingView}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.container}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingBottom: keyboardOffset > 0 ? keyboardOffset + 220 : (Platform.OS === 'ios' ? 140 : 180),
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets={true}
+      >
+        {/* Top Burger / Food Icon */}
       <View style={styles.topIconBox}>
         <Icon name="burger" size={28} color={COLORS.primary} strokeWidth={2} />
       </View>
@@ -229,7 +306,12 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
       )}
 
       {/* Input Form Fields */}
-      <View style={styles.form}>
+      <View
+        style={styles.form}
+        onLayout={(e) => {
+          inputLayouts.current['form'] = e.nativeEvent.layout.y;
+        }}
+      >
         {signUpError ? (
           <View style={styles.errorBanner}>
             <Icon name="alert-circle" size={18} color="#DC2626" variant="filled" style={{ marginRight: 8 }} />
@@ -238,11 +320,12 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
         ) : null}
 
         {/* Full Name */}
-        <View style={styles.inputGroup}>
+        <View style={styles.inputGroup} onLayout={handleFieldLayout('fullName')}>
           <Text style={styles.inputLabel}>Full Name (ชื่อ - นามสกุล)</Text>
           <View style={[styles.inputWrapper, fullNameError ? styles.inputWrapperError : null]}>
             <Icon name="user" size={18} color="#64748B" strokeWidth={2} style={styles.inputPrefixIcon} />
             <TextInput
+              ref={fullNameInputRef}
               style={styles.textInput}
               placeholder="Jane Doe"
               placeholderTextColor={COLORS.textMuted}
@@ -252,6 +335,13 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
                 if (fullNameError) setFullNameError('');
                 if (signUpError) setSignUpError('');
               }}
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => {
+                idInputRef.current?.focus();
+                scrollToField('idNumber');
+              }}
+              onFocus={() => scrollToField('fullName')}
             />
           </View>
           {fullNameError ? (
@@ -260,23 +350,31 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
         </View>
 
         {/* Dynamic Multi-Target ID Field */}
-        <View style={styles.inputGroup}>
+        <View style={styles.inputGroup} onLayout={handleFieldLayout('idNumber')}>
           <Text style={styles.inputLabel}>{idInfo.label}</Text>
           <View style={styles.inputWrapper}>
             <Icon name={idInfo.iconName} size={18} color="#64748B" strokeWidth={2} style={styles.inputPrefixIcon} />
             <TextInput
+              ref={idInputRef}
               style={styles.textInput}
               placeholder={idInfo.placeholder}
               placeholderTextColor={COLORS.textMuted}
               value={idNumber}
               onChangeText={setIdNumber}
               autoCapitalize="characters"
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => {
+                emailInputRef.current?.focus();
+                scrollToField('email');
+              }}
+              onFocus={() => scrollToField('idNumber')}
             />
           </View>
         </View>
 
         {/* Email */}
-        <View style={styles.inputGroup}>
+        <View style={styles.inputGroup} onLayout={handleFieldLayout('email')}>
           <Text style={styles.inputLabel}>
             {role === 'customer' && customerType === 'student'
               ? 'University Email (อีเมล มทส.)'
@@ -285,6 +383,7 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
           <View style={[styles.inputWrapper, emailError ? styles.inputWrapperError : null]}>
             <Icon name="mail" size={18} color="#64748B" strokeWidth={2} style={styles.inputPrefixIcon} />
             <TextInput
+              ref={emailInputRef}
               style={styles.textInput}
               placeholder={
                 role === 'customer' && customerType === 'student'
@@ -300,6 +399,13 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
                 if (emailError) setEmailError('');
                 if (signUpError) setSignUpError('');
               }}
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => {
+                passwordInputRef.current?.focus();
+                scrollToField('password');
+              }}
+              onFocus={() => scrollToField('email')}
             />
           </View>
           {emailError ? (
@@ -308,11 +414,12 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
         </View>
 
         {/* Password */}
-        <View style={styles.inputGroup}>
+        <View style={styles.inputGroup} onLayout={handleFieldLayout('password')}>
           <Text style={styles.inputLabel}>Password</Text>
           <View style={[styles.inputWrapper, passwordError ? styles.inputWrapperError : null]}>
             <Icon name="lock" size={18} color="#64748B" strokeWidth={2} style={styles.inputPrefixIcon} />
             <TextInput
+              ref={passwordInputRef}
               style={styles.textInput}
               placeholder="••••••••"
               placeholderTextColor={COLORS.textMuted}
@@ -323,6 +430,9 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
                 if (passwordError) setPasswordError('');
                 if (signUpError) setSignUpError('');
               }}
+              returnKeyType="done"
+              onSubmitEditing={handleSubmit}
+              onFocus={() => scrollToField('password')}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
               <Icon name={showPassword ? 'eye' : 'eye-off'} size={18} color="#64748B" strokeWidth={2} />
@@ -362,10 +472,15 @@ export default function SignUpScreen({ onSignUpSuccess, onNavigateToSignIn }) {
         </View>
       </View>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardAvoidingView: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.surface,
@@ -373,11 +488,12 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 32,
-    paddingBottom: 40,
+    paddingBottom: Platform.OS === 'ios' ? 140 : 180,
     alignItems: 'center',
     maxWidth: 420,
     width: '100%',
     alignSelf: 'center',
+    flexGrow: 1,
   },
   topIconBox: {
     width: 60,

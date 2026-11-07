@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,16 +21,22 @@ import ClassSyncModal from '../../components/ClassSyncModal';
 import DigitalPassModal from '../../components/DigitalPassModal';
 import EmptyStallsCard from '../../components/EmptyStallsCard';
 import StallDetailModal from '../../components/StallDetailModal';
+import FavoritesModal from '../../components/FavoritesModal';
 import { getFoodImageFallback } from '../../utils/imageUtils';
 
 export default function HomeScreen({
   storeState,
   storeActions,
   currentUser,
+  targetStall = null,
+  onClearTargetStall = null,
+  targetQuickOrder = null,
+  onClearTargetQuickOrder = null,
   onOpenSearch,
   onNavigateTracking,
   onRequireTopUp,
   onOpenProfile,
+  onQuickOrderDish,
 }) {
   const { selectedCanteen, currentBuilding, grabAndGoItems } = storeState;
 
@@ -42,6 +48,7 @@ export default function HomeScreen({
   const [showStallModal, setShowStallModal] = useState(false);
   const [showFoodModal, setShowFoodModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [showFavoritesModal, setShowFavoritesModal] = useState(false);
   const [activePassOrder, setActivePassOrder] = useState(null);
   const [selectedQuantity, setSelectedQuantity] = useState(1);
 
@@ -53,48 +60,55 @@ export default function HomeScreen({
 
   const stalls = selectedCanteen?.stalls || [];
   
-  // Extract all menus across stalls in selected canteen for Version B (Food-First)
-  const allMenuItems = [];
-  stalls.forEach((stall) => {
-    (stall.menus || []).forEach((m) => {
-      allMenuItems.push({ menu: m, stall });
+  // Extract all menus across stalls in selected canteen for Version B (Food-First) with useMemo to avoid recomputing on every ticker
+  const allMenuItems = useMemo(() => {
+    const items = [];
+    stalls.forEach((stall) => {
+      (stall.menus || []).forEach((m) => {
+        items.push({ menu: m, stall });
+      });
     });
-  });
+    return items;
+  }, [stalls]);
 
   // Recommended Menus: menus where isPopular or popular is true
-  const recommendedItems = allMenuItems.filter(
-    ({ menu }) => menu.isPopular || menu.popular
-  );
+  const recommendedItems = useMemo(() => {
+    return allMenuItems.filter(({ menu }) => menu.isPopular || menu.popular);
+  }, [allMenuItems]);
 
   // Grab & Go Menus: menus where isGrabAndGo is true
-  const merchantGrabAndGoItems = allMenuItems
-    .filter(({ menu }) => menu.isGrabAndGo)
-    .map(({ menu, stall }) => {
-      const foodImg = menu.imageUrl || menu.image || getFoodImageFallback(menu.thaiName || menu.name);
-      return {
-        id: menu.id,
-        name: menu.thaiName || menu.name,
-        price: menu.price,
-        imageUrl: foodImg,
-        image: foodImg,
-        canteenName: selectedCanteen?.thaiName || selectedCanteen?.name || 'โรงอาหาร มทส.',
-        pickupSpot: `หน้าร้าน ${stall.thaiName || stall.name}`,
-        packedTime: 'พร้อมหยิบทันที',
-        badge: '● สดใหม่',
-        stock: 10,
-        stall,
-        menu,
-      };
-    });
+  const merchantGrabAndGoItems = useMemo(() => {
+    return allMenuItems
+      .filter(({ menu }) => menu.isGrabAndGo)
+      .map(({ menu, stall }) => {
+        const foodImg = menu.imageUrl || menu.image || getFoodImageFallback(menu.thaiName || menu.name);
+        return {
+          id: menu.id,
+          name: menu.thaiName || menu.name,
+          price: menu.price,
+          imageUrl: foodImg,
+          image: foodImg,
+          canteenName: selectedCanteen?.thaiName || selectedCanteen?.name || 'โรงอาหาร มทส.',
+          pickupSpot: `หน้าร้าน ${stall.thaiName || stall.name}`,
+          packedTime: 'พร้อมหยิบทันที',
+          badge: '● สดใหม่',
+          stock: 10,
+          stall,
+          menu,
+        };
+      });
+  }, [allMenuItems, selectedCanteen]);
 
   // Filter stalls if a wait tier is selected
-  const filteredStalls = stalls.filter((stall) => {
-    if (!waitTierFilter) return true;
-    if (waitTierFilter === 'low') return stall.waitMinutes <= 10;
-    if (waitTierFilter === 'medium') return stall.waitMinutes > 10 && stall.waitMinutes <= 20;
-    if (waitTierFilter === 'high') return stall.waitMinutes > 20;
-    return true;
-  });
+  const filteredStalls = useMemo(() => {
+    return stalls.filter((stall) => {
+      if (!waitTierFilter) return true;
+      if (waitTierFilter === 'low') return stall.waitMinutes <= 10;
+      if (waitTierFilter === 'medium') return stall.waitMinutes > 10 && stall.waitMinutes <= 20;
+      if (waitTierFilter === 'high') return stall.waitMinutes > 20;
+      return true;
+    });
+  }, [stalls, waitTierFilter]);
 
   const handleSelectStall = (stall) => {
     if (stall.isOpen === false) {
@@ -104,6 +118,26 @@ export default function HomeScreen({
     setSelectedStall(stall);
     setShowStallModal(true);
   };
+
+  useEffect(() => {
+    if (targetStall) {
+      handleSelectStall(targetStall);
+      if (typeof onClearTargetStall === 'function') {
+        onClearTargetStall();
+      }
+    }
+  }, [targetStall]);
+
+  useEffect(() => {
+    if (targetQuickOrder?.menu && targetQuickOrder?.stall) {
+      setSelectedStall(targetQuickOrder.stall);
+      setSelectedMenu(targetQuickOrder.menu);
+      setShowFoodModal(true);
+      if (typeof onClearTargetQuickOrder === 'function') {
+        onClearTargetQuickOrder();
+      }
+    }
+  }, [targetQuickOrder]);
 
   const handleSelectRecommendedMenu = (menu, stall) => {
     if (stall.isOpen === false) {
@@ -190,7 +224,7 @@ export default function HomeScreen({
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* 1. Mobile Header (Greeting with registered user name, avatar photo, Canteen, Search) */}
+        {/* 1. Mobile Header (Greeting with registered user name, avatar photo, Canteen, Search, Favorites) */}
         <MobileHeader
           userName={currentUser?.fullName || 'ผู้ใช้งาน'}
           avatarUri={currentUser?.avatarUri}
@@ -198,6 +232,8 @@ export default function HomeScreen({
           onSelectCanteen={storeActions.setSelectedCanteen}
           onOpenSearch={onOpenSearch}
           onOpenProfile={onOpenProfile}
+          onOpenFavorites={() => setShowFavoritesModal(true)}
+          stalls={storeState.stalls || []}
         />
 
         {/* 2. GRAB & GO FEATURE (Fast-Lane 0 นาที ดึงจากเมนูที่แม่ค้าเปิดโหมด Grab & Go) */}
@@ -206,13 +242,15 @@ export default function HomeScreen({
           onQuickBuy={handleQuickGrabAndGoBuy}
         />
 
-        {/* 3. ✨ เมนูแนะนำ (Recommended Menus) - อยู่เหนือหัวข้อ "แนะนำสำหรับคุณ" */}
+        {/* 3. เมนูแนะนำ (Recommended Menus) */}
         <RecommendedMenusSection
           items={recommendedItems}
           onSelectMenu={handleSelectRecommendedMenu}
+          isFavoriteDish={(menu) => storeActions.isFavoriteDish(menu.id, menu.thaiName || menu.name)}
+          onToggleFavoriteDish={(menu, stall) => storeActions.toggleFavoriteDish(menu, stall)}
         />
 
-        {/* 4. แคปซูลกรองเวลารอด่วน (Version B: ตัวกรองเสริม ไม่บังคับผ่าน) */}
+        {/* 4. แคปซูลกรองเวลารอด่วน */}
         <View style={styles.filterChipsRow}>
           <ScrollView
             horizontal
@@ -220,10 +258,10 @@ export default function HomeScreen({
             contentContainerStyle={styles.filterChipsScroll}
           >
             {[
-              { key: null, label: '🍽️ ทั้งหมด' },
-              { key: 'low', label: '⚡ รอไม่เกิน 10 นาที' },
-              { key: 'medium', label: '⏳ 10–20 นาที' },
-              { key: 'high', label: '🍱 สั่งล่วงหน้า (>20 น.)' },
+              { key: null, label: 'ทั้งหมด' },
+              { key: 'low', label: 'รอไม่เกิน 10 นาที' },
+              { key: 'medium', label: '10–20 นาที' },
+              { key: 'high', label: 'สั่งล่วงหน้า (>20 น.)' },
             ].map((chip) => {
               const isActive = waitTierFilter === chip.key;
               return (
@@ -260,6 +298,18 @@ export default function HomeScreen({
           <EmptyStallsCard
             canteenName={selectedCanteen?.thaiName || selectedCanteen?.name}
             onRefresh={() => storeActions.reloadStalls && storeActions.reloadStalls()}
+            onSwitchToActiveCanteen={() => {
+              const kasalong = (storeState.canteens || []).find((c) => c.id === 'canteen-5') || {
+                id: 'canteen-5',
+                name: 'Kasalong Canteen',
+                thaiName: 'โรงอาหารกาสะลองคำ',
+              };
+              storeActions.setSelectedCanteen(kasalong);
+            }}
+            activeCanteenName="โรงอาหารกาสะลองคำ"
+            activeStallsCount={
+              (storeState.stalls || []).filter((s) => s.canteenId === 'canteen-5' && s.isOpen !== false).length
+            }
           />
         ) : (
           <View style={styles.stallsList}>
@@ -267,6 +317,8 @@ export default function HomeScreen({
               <StallCard
                 key={stall.id}
                 stall={stall}
+                isFavorite={storeActions.isFavoriteStall(stall.id)}
+                onToggleFavorite={() => storeActions.toggleFavoriteStall(stall)}
                 onSelect={handleSelectStall}
               />
             ))}
@@ -280,6 +332,10 @@ export default function HomeScreen({
       <StallDetailModal
         visible={showStallModal}
         stall={stalls.find((s) => s.id === selectedStall?.id) || selectedStall}
+        isFavoriteStall={storeActions.isFavoriteStall(selectedStall?.id)}
+        onToggleFavoriteStall={() => storeActions.toggleFavoriteStall(selectedStall)}
+        isFavoriteDish={(menu) => storeActions.isFavoriteDish(menu.id, menu.thaiName || menu.name)}
+        onToggleFavoriteDish={(menu) => storeActions.toggleFavoriteDish(menu, selectedStall)}
         onClose={() => setShowStallModal(false)}
         onSelectMenu={handleSelectMenuFromStall}
       />
@@ -292,7 +348,41 @@ export default function HomeScreen({
         }}
         stall={selectedStall}
         menuItem={selectedMenu}
+        isFavoriteDish={storeActions.isFavoriteDish(selectedMenu?.id, selectedMenu?.thaiName || selectedMenu?.name)}
+        onToggleFavoriteDish={() => storeActions.toggleFavoriteDish(selectedMenu, selectedStall)}
         onProceedToSync={handleProceedToSync}
+      />
+
+      {/* Favorites Modal */}
+      <FavoritesModal
+        visible={showFavoritesModal}
+        onClose={() => setShowFavoritesModal(false)}
+        favoriteDishes={storeState.favoriteDishes || []}
+        favoriteStallIds={storeState.favoriteStallIds || []}
+        stalls={stalls}
+        onQuickOrderDish={(dish) => {
+          setShowFavoritesModal(false);
+          if (onQuickOrderDish) {
+            onQuickOrderDish(dish);
+          } else {
+            const matchedStall = stalls.find((s) => s.id === dish.stallId || s.thaiName === dish.stallName);
+            if (matchedStall) {
+              const menu = matchedStall.menus?.find((m) => m.id === dish.id || m.name === dish.name) || {
+                id: dish.id,
+                name: dish.name,
+                price: dish.price,
+                desc: dish.desc,
+              };
+              handleSelectRecommendedMenu(menu, matchedStall);
+            }
+          }
+        }}
+        onSelectStall={(stall) => {
+          setShowFavoritesModal(false);
+          handleSelectStall(stall);
+        }}
+        onToggleFavoriteDish={(dish) => storeActions.toggleFavoriteDish(dish)}
+        onToggleFavoriteStall={(stall) => storeActions.toggleFavoriteStall(stall)}
       />
 
       <ClassSyncModal
@@ -360,7 +450,7 @@ export default function HomeScreen({
             </View>
 
             <Text style={styles.insufficientHint}>
-              💡 กรุณาเติมเงินเข้ากระเป๋า SUT Canteen Wallet เพื่อดำเนินการต่อ
+              กรุณาเติมเงินเข้ากระเป๋า SUT Canteen Wallet เพื่อดำเนินการต่อ
             </Text>
 
             {/* Action Buttons */}
@@ -376,7 +466,7 @@ export default function HomeScreen({
                 activeOpacity={0.85}
               >
                 <Icon name="wallet" size={16} color="#FFFFFF" variant="filled" style={{ marginRight: 6 }} />
-                <Text style={styles.goToTopUpBtnText}>ไปเติมเงินทันที 💳</Text>
+                <Text style={styles.goToTopUpBtnText}>ไปเติมเงินทันที</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -451,7 +541,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   bottomSpacer: {
-    height: 30,
+    height: 90,
   },
   // In-App Insufficient Balance Pop-Up Modal Styles
   modalBackdrop: {
