@@ -277,8 +277,18 @@ export default function App() {
             {activeTab === 'search' && (
               <SearchScreen
                 stalls={state.stalls || []}
+                storeState={state}
+                storeActions={storeActions}
+                currentUser={currentUser}
+                onRequireTopUp={handleRequireTopUp}
+                onNavigateTracking={() => setActiveTab('orders')}
                 onSelectStall={(stall) => {
-                  storeActions.setSelectedCanteen(state.selectedCanteen);
+                  if (stall?.canteenId) {
+                    const matchedCanteen = (state.canteens || []).find((c) => c.id === stall.canteenId);
+                    if (matchedCanteen) {
+                      storeActions.setSelectedCanteen(matchedCanteen);
+                    }
+                  }
                   setActiveTab('home');
                 }}
               />
